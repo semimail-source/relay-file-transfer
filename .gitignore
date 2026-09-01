@@ -1,0 +1,11 @@
+node_modules/
+.vercel/
+
+# Never commit local or production credentials.
+.env
+.env.*
+!.env.example
+
+coverage/
+*.log
+.DS_Store
