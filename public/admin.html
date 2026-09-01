@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f4f1e8">
+    <title>Relay — 中继安全控制</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/admin.js" defer></script>
+  </head>
+  <body>
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="Relay 首页">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span>Relay</span>
+      </a>
+      <div class="privacy-pill"><span></span> 管理员控制台</div>
+    </header>
+
+    <main class="admin-main">
+      <section class="admin-card">
+        <p class="eyebrow">TURN SAFETY CONTROL</p>
+        <h1>把公网中继，<br><em>锁在免费额度内。</em></h1>
+        <p class="lede">系统在签发中继凭证前检查当月 Cloudflare 出口流量；达到 800GB 后自动停止。关闭中继不会影响同一网络的浏览器直连。</p>
+
+        <form id="admin-login" class="admin-login">
+          <label for="admin-token">管理员口令</label>
+          <div class="admin-login-row">
+            <input id="admin-token" type="password" autocomplete="current-password" required>
+            <button type="submit">读取状态</button>
+          </div>
+          <small>口令只保存在当前页面内存中，关闭页面后清除。</small>
+        </form>
+
+        <div id="admin-panel" class="admin-panel hidden">
+          <div class="admin-status-line">
+            <span id="relay-dot" class="relay-dot"></span>
+            <span>公网中继</span>
+            <strong id="relay-state">正在读取</strong>
+          </div>
+          <div class="admin-metrics">
+            <div><span>本月已用</span><strong id="usage-value">—</strong></div>
+            <div><span>自动停止线</span><strong id="limit-value">800 GB</strong></div>
+            <div><span>手动许可</span><strong id="manual-value">关闭</strong></div>
+            <div><span>环境配置</span><strong id="config-value">未配置</strong></div>
+          </div>
+          <p id="relay-explanation" class="admin-explanation"></p>
+          <button id="relay-toggle" class="primary-button admin-toggle" type="button"><span>允许公网中继</span><span aria-hidden="true">→</span></button>
+          <button id="admin-refresh" class="text-button" type="button">刷新状态</button>
+        </div>
+        <p id="admin-error" class="error-message" role="alert"></p>
+      </section>
+    </main>
+
+    <footer><span>达到安全线自动关闭 · 用量查询失败时默认关闭</span><span>临时凭证最长 1 小时</span></footer>
+  </body>
+</html>

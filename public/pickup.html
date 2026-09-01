@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f4f1e8">
+    <title>输入取件码 — Relay</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/pickup-crypto.js" defer></script>
+    <script src="/pickup.js" defer></script>
+  </head>
+  <body>
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+
+    <header class="site-header">
+      <a class="brand" href="/" aria-label="Relay 首页">
+        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span>Relay</span>
+      </a>
+      <div class="privacy-pill"><span></span> 端到端加密 · 不存文件</div>
+    </header>
+
+    <main class="pickup-main">
+      <section class="pickup-card">
+        <div class="pickup-orbit" aria-hidden="true"><span>↓</span></div>
+        <p class="eyebrow">固定取件入口</p>
+        <h1>输入取件码，<br><em>把文件接住。</em></h1>
+        <p class="pickup-message">输入发送方告诉你的“英文名字 + 6 位数字”。双方仍需同时在线；如果发送方开启了额外验证，页面才会显示六位验证码。</p>
+        <form id="pickup-form" class="pickup-form">
+          <label for="pickup-input">取件码</label>
+          <input id="pickup-input" type="text" inputmode="text" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" maxlength="13" placeholder="例如 EMMA-482731" aria-describedby="pickup-help pickup-error" autofocus>
+          <small id="pickup-help">4–6 位英文字母 + 6 位数字，不区分大小写；短横线可省略</small>
+          <button id="pickup-submit" class="primary-button" type="submit"><span>提取文件</span><span aria-hidden="true">→</span></button>
+          <p id="pickup-error" class="error-message" role="alert"></p>
+        </form>
+        <a class="pickup-back" href="/">我要发送文件</a>
+      </section>
+    </main>
+
+    <footer><span>AES-GCM 加密 · SHA-256 完整性校验</span><span>取件码 2 小时后自动失效</span></footer>
+  </body>
+</html>

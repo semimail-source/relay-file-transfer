@@ -1,0 +1,2 @@
+Relay WebRTC end-to-end transfer test.
+如果你能读到这一行，说明文件已经从发送页面完整抵达接收页面。

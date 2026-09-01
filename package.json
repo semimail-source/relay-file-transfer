@@ -1,0 +1,38 @@
+{
+  "name": "relay-file-transfer",
+  "version": "1.0.0",
+  "private": false,
+  "description": "Install-free, end-to-end encrypted browser file transfer powered by WebRTC.",
+  "license": "MIT",
+  "homepage": "https://relay.xueai.pro",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/semimail-source/relay-file-transfer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/semimail-source/relay-file-transfer/issues"
+  },
+  "keywords": [
+    "file-transfer",
+    "webrtc",
+    "peer-to-peer",
+    "end-to-end-encryption",
+    "airdrop",
+    "browser"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "npm run build:qrcode",
+    "build:qrcode": "esbuild node_modules/qrcode/lib/browser.js --bundle --format=iife --global-name=QRCode --minify --outfile=public/qrcode.bundle.js",
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.9"
+  }
+}
