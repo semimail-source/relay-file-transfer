@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#ffffff">
     <title data-i18n="meta.pickupTitle">输入取件码 — Relay</title>
-    <link rel="stylesheet" href="/styles.css?v=10">
-    <script src="/i18n.js?v=9" defer></script>
+    <link rel="stylesheet" href="/styles.css?v=12">
+    <script src="/i18n.js?v=10" defer></script>
     <script src="/pickup-crypto.js" defer></script>
     <script src="/pickup.js?v=3" defer></script>
   </head>
@@ -34,11 +34,11 @@
         <div class="pickup-orbit" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 4v11m0 0 4-4m-4 4-4-4M5 19.5h14"/></svg></div>
         <p class="eyebrow" data-i18n="pickup.eyebrow">Relay 取件</p>
         <h1 data-i18n-html="pickup.title">输入取件码</h1>
-        <p class="pickup-message" data-i18n="pickup.message">输入发送方告诉你的“英文名字 + 6 位数字”。双方仍需同时在线；如果发送方开启了额外验证，页面才会显示六位验证码。</p>
+        <p class="pickup-message" data-i18n="pickup.message">名字 + 6 位数字。双方需同时在线。</p>
         <form id="pickup-form" class="pickup-form">
           <label for="pickup-input" data-i18n="pickup.label">取件码</label>
           <input id="pickup-input" type="text" inputmode="text" autocomplete="one-time-code" autocapitalize="characters" spellcheck="false" maxlength="13" placeholder="例如 EMMA-482731" data-i18n-placeholder="pickup.placeholder" aria-describedby="pickup-help pickup-error" autofocus>
-          <small id="pickup-help" data-i18n="pickup.help">4–6 位英文字母 + 6 位数字，不区分大小写；短横线可省略</small>
+          <small id="pickup-help" data-i18n="pickup.help">4–6 位英文字母 + 6 位数字，不区分大小写</small>
           <button id="pickup-submit" class="primary-button" type="submit"><span data-i18n="pickup.submit">提取文件</span><span aria-hidden="true">→</span></button>
           <p id="pickup-error" class="error-message" role="alert"></p>
         </form>
