@@ -6,7 +6,7 @@
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fsemimail-source%2Frelay-file-transfer)
 
-![Relay browser file transfer preview](preview.png)
+![Relay 浏览器文件直传演示](docs/relay-demo.gif)
 
 Relay 是一个开源的浏览器文件直传工具。Windows、macOS、iPhone、iPad 和 Android 无需安装客户端：选择一个或多个文件，把网址、二维码或简短取件码告诉对方，即可实时传输。
 
