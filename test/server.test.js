@@ -75,6 +75,10 @@ test("serves the encrypted sender page with security headers", async () => {
   assert.equal(response.headers.get("x-frame-options"), "SAMEORIGIN");
   assert.equal(response.headers.get("x-content-type-options"), "nosniff");
   assert.match(response.headers.get("permissions-policy"), /screen-wake-lock=\(self\)/);
+
+  const fontResponse = await fetch(`${origin}/fonts/nebula-sans/NebulaSans-Book.woff2`);
+  assert.equal(fontResponse.status, 200);
+  assert.equal(fontResponse.headers.get("content-type"), "font/woff2");
 });
 
 test("keeps the screen awake only while file bytes are transferring", async () => {
