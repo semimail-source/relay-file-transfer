@@ -9,7 +9,11 @@ const {
 } = window.RelayPickup;
 const CHUNK_SIZE = 64 * 1024;
 const MAX_FILES = 100;
+const MAX_SENDER_TASKS = 6;
 const DANGEROUS_EXTENSIONS = /\.(?:exe|msi|bat|cmd|com|scr|ps1|vbs|jar|app|pkg|dmg|sh)$/i;
+const pageParams = new URLSearchParams(window.location.search);
+const embeddedTaskId = pageParams.get("senderTask");
+const isEmbeddedSender = pageParams.get("embedded") === "1" && Boolean(embeddedTaskId);
 
 const state = {
   role: null,
@@ -47,8 +51,150 @@ const state = {
   disconnectTimer: null,
   pairingCode: null,
   receiptConfirmed: false,
-  expiryTimer: null
+  expiryTimer: null,
+  lastTaskProgress: -1
 };
+
+const taskHubState = {
+  activeId: null,
+  nextNumber: 1,
+  tasks: new Map()
+};
+
+function notifyTaskParent(phase, detail = {}) {
+  if (!isEmbeddedSender || window.parent === window) return;
+  window.parent.postMessage({ type: "relay:task-status", taskId: embeddedTaskId, phase, ...detail }, window.location.origin);
+}
+
+function taskStatusText(phase, detail = {}) {
+  const labels = {
+    ready: "等待选择文件",
+    selected: `已选择 ${detail.fileCount || 0} 个文件`,
+    creating: "正在生成入口",
+    waiting: "等待对方打开",
+    opened: "等待对方确认",
+    confirmed: "对方已确认",
+    connecting: "正在建立连接",
+    connected: "等待对方接收",
+    transferring: `传输中 ${detail.percent ?? 0}%`,
+    received: "已接收，等待保存",
+    complete: "已完成",
+    error: "连接遇到问题"
+  };
+  return labels[phase] || "发送任务";
+}
+
+function setActiveSenderTask(taskId) {
+  if (!taskHubState.tasks.has(taskId)) return;
+  taskHubState.activeId = taskId;
+  for (const [id, task] of taskHubState.tasks) {
+    const active = id === taskId;
+    task.tab.classList.toggle("active", active);
+    task.tabButton.setAttribute("aria-selected", String(active));
+    task.panel.classList.toggle("hidden", !active);
+  }
+}
+
+function finalizeSenderTaskRemoval(taskId) {
+  const task = taskHubState.tasks.get(taskId);
+  if (!task) return;
+  const wasActive = taskHubState.activeId === taskId;
+  task.tab.remove();
+  task.panel.remove();
+  taskHubState.tasks.delete(taskId);
+  if (wasActive) {
+    const next = taskHubState.tasks.keys().next().value;
+    if (next) setActiveSenderTask(next);
+  }
+  if (taskHubState.tasks.size === 0) createSenderTask();
+  refreshAddTaskButton();
+}
+
+function requestSenderTaskRemoval(taskId) {
+  const task = taskHubState.tasks.get(taskId);
+  if (!task) return;
+  const activePhases = new Set(["creating", "waiting", "opened", "confirmed", "connecting", "connected", "transferring", "received"]);
+  if (activePhases.has(task.phase) && !window.confirm("关闭这个任务会停止传输并让取件入口失效。确定关闭吗？")) return;
+  task.iframe.contentWindow?.postMessage({ type: "relay:cancel-task", taskId }, window.location.origin);
+  task.closeTimer = setTimeout(() => finalizeSenderTaskRemoval(taskId), 1200);
+}
+
+function refreshAddTaskButton() {
+  const button = $("#add-sender-task");
+  if (!button) return;
+  const full = taskHubState.tasks.size >= MAX_SENDER_TASKS;
+  button.disabled = full;
+  button.title = full ? `一次最多保留 ${MAX_SENDER_TASKS} 个发送任务` : "在当前页面新增发送任务";
+}
+
+function createSenderTask() {
+  if (taskHubState.tasks.size >= MAX_SENDER_TASKS) return;
+  const number = taskHubState.nextNumber++;
+  const taskId = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${number}`;
+
+  const tab = document.createElement("div");
+  tab.className = "task-tab";
+  const tabButton = document.createElement("button");
+  tabButton.type = "button";
+  tabButton.className = "task-tab-main";
+  tabButton.setAttribute("role", "tab");
+  tabButton.innerHTML = `<span class="task-dot"></span><span class="task-tab-copy"><strong>任务 ${number}</strong><small>等待选择文件</small></span>`;
+  const closeButton = document.createElement("button");
+  closeButton.type = "button";
+  closeButton.className = "task-close";
+  closeButton.setAttribute("aria-label", `关闭任务 ${number}`);
+  closeButton.textContent = "×";
+  tab.append(tabButton, closeButton);
+
+  const panel = document.createElement("div");
+  panel.className = "task-panel";
+  panel.setAttribute("role", "tabpanel");
+  const iframe = document.createElement("iframe");
+  iframe.className = "task-frame";
+  iframe.title = `发送任务 ${number}`;
+  iframe.src = `/?embedded=1&senderTask=${encodeURIComponent(taskId)}`;
+  iframe.setAttribute("allow", "clipboard-write");
+  panel.append(iframe);
+
+  const task = { id: taskId, number, tab, tabButton, panel, iframe, phase: "ready", closeTimer: null };
+  taskHubState.tasks.set(taskId, task);
+  $("#task-tabs").append(tab);
+  $("#task-panels").append(panel);
+  tabButton.addEventListener("click", () => setActiveSenderTask(taskId));
+  closeButton.addEventListener("click", () => requestSenderTaskRemoval(taskId));
+  setActiveSenderTask(taskId);
+  refreshAddTaskButton();
+}
+
+function initTaskHub() {
+  showView("#sender-start");
+  $("#sender-task-editor").classList.add("hidden");
+  $("#task-hub").classList.remove("hidden");
+  $("#add-sender-task").addEventListener("click", createSenderTask);
+  window.addEventListener("message", event => {
+    if (event.origin !== window.location.origin || !event.data || typeof event.data !== "object") return;
+    const task = taskHubState.tasks.get(event.data.taskId);
+    if (!task || event.source !== task.iframe.contentWindow) return;
+    if (event.data.type === "relay:task-height") {
+      const height = Math.max(590, Math.min(1700, Number(event.data.height) || 0));
+      task.iframe.style.height = `${height}px`;
+      return;
+    }
+    if (event.data.type === "relay:task-closed") {
+      clearTimeout(task.closeTimer);
+      finalizeSenderTaskRemoval(task.id);
+      return;
+    }
+    if (event.data.type !== "relay:task-status") return;
+    task.phase = event.data.phase;
+    task.tab.dataset.phase = event.data.phase;
+    const title = task.tab.querySelector("strong");
+    const status = task.tab.querySelector("small");
+    if (event.data.pickupCode) title.textContent = event.data.pickupCode;
+    status.textContent = taskStatusText(event.data.phase, event.data);
+  });
+  createSenderTask();
+}
 
 function showView(selector) {
   for (const view of document.querySelectorAll(".view")) view.classList.add("hidden");
@@ -130,6 +276,7 @@ function setSelectedFiles(fileList) {
     $("#selected-size").textContent = `${formatBytes(totalSize(files))} · 总大小`;
     $("#selected-list").textContent = fileNameSummary(files);
   }
+  notifyTaskParent(files.length ? "selected" : "ready", { fileCount: files.length });
 }
 
 async function api(path, options = {}) {
@@ -249,6 +396,7 @@ async function makePeer(role) {
       $("#sender-kicker").textContent = "接收设备已连接";
       $("#sender-status").textContent = "等待对方确认文件";
       $("#sender-detail").textContent = "连接已加密，文件尚未开始传输";
+      notifyTaskParent("connected");
     } else if (peer.connectionState === "failed") {
       showConnectionError(new Error("无法建立直连。请检查网络，或确认公网中继已经配置。"));
     } else if (peer.connectionState === "disconnected") {
@@ -332,6 +480,7 @@ function wireSenderChannel(channel) {
           $("#sender-kicker").textContent = "对方已完整接收";
           $("#sender-status").textContent = `${state.files.length} 个文件均已校验`;
           $("#sender-detail").textContent = "等待对方逐个点击保存，请暂时保持页面打开";
+          notifyTaskParent("received");
         }
       }
       if (message.type === "save-clicked") {
@@ -341,6 +490,7 @@ function wireSenderChannel(channel) {
         if (state.savedAcks.size === state.files.length) {
           $("#sender-status").textContent = "现在可以关闭页面";
           $("#sender-detail").textContent = "系统无法读取对方磁盘状态；这里只确认每个保存按钮均已点击";
+          notifyTaskParent("complete");
           deleteRoom().catch(() => {});
         }
       }
@@ -363,6 +513,7 @@ async function sendFiles() {
   let batchOffset = 0;
   $("#sender-kicker").textContent = "正在加密传输";
   $("#sender-detail").textContent = `${state.files.length} 个文件 · ${formatBytes(batchSize)} · 请保持页面打开`;
+  notifyTaskParent("transferring", { percent: 0 });
   for (let fileIndex = 0; fileIndex < state.files.length; fileIndex += 1) {
     const file = state.files[fileIndex];
     const noncePrefix = crypto.getRandomValues(new Uint8Array(4));
@@ -395,6 +546,10 @@ async function sendFiles() {
       const percent = batchSize ? Math.min(100, Math.round((batchOffset / batchSize) * 100)) : 100;
       $("#sender-progress").style.width = `${percent}%`;
       $("#sender-percent").textContent = `${percent}%`;
+      if (percent === 100 || percent >= state.lastTaskProgress + 2) {
+        state.lastTaskProgress = percent;
+        notifyTaskParent("transferring", { percent });
+      }
     }
     const hash = hasher.hex();
     state.sentHashes.set(fileIndex, hash);
@@ -418,6 +573,7 @@ async function createRoom() {
   }
   $("#create-room").disabled = true;
   $("#start-error").textContent = "";
+  notifyTaskParent("creating");
   try {
     const pickupCode = generatePickupCode(pickupName);
     const keyBytes = crypto.getRandomValues(new Uint8Array(32));
@@ -437,6 +593,7 @@ async function createRoom() {
     $("#pickup-url").textContent = room.pickupUrl;
     $("#pickup-url").href = room.pickupUrl;
     $("#pickup-code").textContent = formatPickupCode(pickupCode);
+    notifyTaskParent("waiting", { pickupCode: formatPickupCode(pickupCode), fileCount: state.files.length });
     $("#share-instruction").textContent = state.verificationRequired
       ? "对方确认收到后才开始 20 分钟倒计时；再核对六位验证码，文件才会连接。"
       : "对方确认收到后才开始 20 分钟倒计时，随后会自动建立加密连接。";
@@ -449,6 +606,7 @@ async function createRoom() {
       ? "随机取件码发生冲突，请再点一次生成。"
       : "无法创建传输入口，请稍后重试。";
     refreshCreateButton();
+    notifyTaskParent("error");
   }
 }
 
@@ -460,9 +618,11 @@ async function handleSenderSignal(message) {
     $("#sender-pairing").classList.add("hidden");
     $("#sender-status").textContent = "等待对方确认收到";
     $("#sender-detail").textContent = "对方点击确认后，20 分钟倒计时才开始";
+    notifyTaskParent("opened");
   } else if (message.type === "confirmed") {
     state.receiptConfirmed = true;
     startExpiryCountdown(message.data.expiresAt);
+    notifyTaskParent("confirmed");
     $("#sender-kicker").textContent = "对方已确认收到";
     if (state.verificationRequired) {
       $("#sender-pair-code").textContent = formatCode(state.pairingCode);
@@ -497,6 +657,7 @@ async function approveReceiver() {
     $("#sender-pairing").classList.add("hidden");
     $("#sender-kicker").textContent = "正在建立加密连接";
     $("#sender-status").textContent = "请稍候";
+    notifyTaskParent("connecting");
   } catch (error) {
     button.disabled = false;
     showConnectionError(error);
@@ -817,6 +978,7 @@ function showConnectionError(error) {
   } else {
     $("#sender-kicker").textContent = "连接遇到问题";
     $("#sender-status").textContent = message;
+    notifyTaskParent("error");
   }
 }
 
@@ -868,10 +1030,32 @@ async function cancelRoom() {
   stopExpiryCountdown();
   state.peer?.close();
   await deleteRoom().catch(() => {});
+  if (isEmbeddedSender) {
+    window.parent.postMessage({ type: "relay:task-closed", taskId: embeddedTaskId }, window.location.origin);
+    return;
+  }
   window.location.href = "/";
 }
 
 function initSender() {
+  if (isEmbeddedSender) {
+    document.body.classList.add("embedded-sender");
+    $("#task-hub").classList.add("hidden");
+    $("#sender-task-editor").classList.remove("hidden");
+    const reportHeight = () => {
+      window.parent.postMessage({
+        type: "relay:task-height",
+        taskId: embeddedTaskId,
+        height: document.documentElement.scrollHeight
+      }, window.location.origin);
+    };
+    if (window.ResizeObserver) new ResizeObserver(reportHeight).observe(document.body);
+    window.addEventListener("load", reportHeight, { once: true });
+    window.addEventListener("message", event => {
+      if (event.origin !== window.location.origin || event.source !== window.parent) return;
+      if (event.data?.type === "relay:cancel-task" && event.data.taskId === embeddedTaskId) cancelRoom();
+    });
+  }
   showView("#sender-start");
   const input = $("#file-input");
   const pickupName = $("#pickup-name");
@@ -891,12 +1075,13 @@ function initSender() {
   $("#copy-pickup-code").addEventListener("click", copyPickupCode);
   $("#cancel-room").addEventListener("click", cancelRoom);
   $("#approve-receiver").addEventListener("click", approveReceiver);
+  notifyTaskParent("ready");
 }
 
 $("#accept-file").addEventListener("click", acceptFile);
 $("#confirm-receipt").addEventListener("click", confirmReceipt);
 
-const roomId = new URLSearchParams(window.location.search).get("room");
+const roomId = pageParams.get("room");
 const secrets = new URLSearchParams(window.location.hash.slice(1));
 const TOKEN_PATTERN_CLIENT = /^[A-Za-z0-9_-]{32,128}$/;
 if (roomId && secrets.get("invite") && secrets.get("key")) startReceiver(roomId, secrets.get("invite"), secrets.get("key"));
@@ -906,7 +1091,8 @@ else if (roomId && secrets.get("receiver") && secrets.get("code")) {
 else if (roomId) {
   showView("#receiver-view");
   showConnectionError(new Error("链接缺少一次性安全密钥，请让发送方重新生成。"));
-} else initSender();
+} else if (isEmbeddedSender) initSender();
+else initTaskHub();
 
 window.addEventListener("beforeunload", () => {
   stopPolling();

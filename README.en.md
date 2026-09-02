@@ -20,6 +20,7 @@ never stored by Relay.
 - Peer-to-peer WebRTC DataChannel transfer with optional TURN fallback.
 - One-time links, locally generated QR codes, and human-friendly pickup codes.
 - Multiple files with per-file size, chunk-count, and SHA-256 verification.
+- Up to six independent sender tasks in one page; switching tasks does not interrupt an active handoff.
 - Optional six-digit human confirmation before connecting.
 - Built-in TURN enable switch, administrator approval, and monthly usage limit.
 

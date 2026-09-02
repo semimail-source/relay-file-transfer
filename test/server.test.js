@@ -64,7 +64,11 @@ test("serves the encrypted sender page with security headers", async () => {
   assert.match(html, /id="pickup-name"[^>]+maxlength="6"/);
   assert.match(html, /id="verification-required" type="checkbox"/);
   assert.match(html, /id="download-list"/);
+  assert.match(html, /id="add-sender-task"/);
+  assert.match(html, /id="task-panels"/);
   assert.match(response.headers.get("content-security-policy"), /default-src 'self'/);
+  assert.match(response.headers.get("content-security-policy"), /frame-ancestors 'self'/);
+  assert.equal(response.headers.get("x-frame-options"), "SAMEORIGIN");
   assert.equal(response.headers.get("x-content-type-options"), "nosniff");
 });
 

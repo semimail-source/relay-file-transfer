@@ -37,7 +37,20 @@
           </div>
         </div>
 
-        <div class="transfer-card">
+        <section id="task-hub" class="task-hub hidden" aria-label="发送任务中心">
+          <div class="task-hub-header">
+            <div>
+              <span class="step-label">发送任务中心</span>
+              <strong>在一个页面管理多次传输</strong>
+            </div>
+            <button id="add-sender-task" class="add-task-button" type="button"><span aria-hidden="true">＋</span> 新增发送任务</button>
+          </div>
+          <div id="task-tabs" class="task-tabs" role="tablist" aria-label="发送任务"></div>
+          <div id="task-panels" class="task-panels"></div>
+          <p class="task-hub-note">切换任务不会中断传输；每个任务的文件、取件码和加密连接彼此独立。</p>
+        </section>
+
+        <div id="sender-task-editor" class="transfer-card">
           <div class="card-topline"><span class="step-label">01 / 选择文件</span><span class="device-label">任意设备 → 任意设备</span></div>
           <label id="drop-zone" class="drop-zone" for="file-input">
             <input id="file-input" type="file" multiple>
