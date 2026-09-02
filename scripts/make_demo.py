@@ -5,16 +5,16 @@ from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parents[1]
 FRAME_DIR = ROOT / "docs" / "demo" / "frames"
-OUT = ROOT / "docs" / "relay-demo.gif"
-PREVIEW = ROOT / "docs" / "relay-demo-preview.png"
+OUT = ROOT / "docs" / "relay-demo-v2.gif"
+PREVIEW = ROOT / "docs" / "relay-demo-v2-preview.png"
 
 CAPTIONS = [
-    ("HOME", "Send or receive from the same page.", "No second-level page is needed."),
-    ("SEND", "Choose files. Add a short name.", "Optional verification is separate."),
-    ("SHARE", "Share one thing: link, QR, or pickup code.", "A link or QR opens the receiver page directly."),
-    ("CONFIRM", "The recipient confirms receipt.", "Only now does the 20-minute window begin."),
-    ("RECEIVE", "Review the files, then start the transfer.", "Both browsers stay online while files move."),
-    ("DONE", "Original files arrive. Relay stores nothing.", "The sender sees that the transfer completed."),
+    ("HOME", "Send or receive on one page."),
+    ("SEND", "Choose files and add a short name."),
+    ("SHARE", "Share a link, QR, or pickup code."),
+    ("CONFIRM", "Confirm receipt. The 20-minute timer starts."),
+    ("RECEIVE", "Review, then receive the original files."),
+    ("DONE", "Verified and ready to save."),
 ]
 
 FRAME_NAMES = [
@@ -28,7 +28,7 @@ FRAME_NAMES = [
 
 WIDTH = 960
 SCREEN_HEIGHT = 540
-BAR_HEIGHT = 108
+BAR_HEIGHT = 78
 BACKGROUND = "#0b0b0b"
 PRIMARY = "#f7f7f7"
 SECONDARY = "#a1a1aa"
@@ -55,7 +55,6 @@ def load_font(size: int, mono: bool = False) -> ImageFont.FreeTypeFont:
 
 
 FONT_MAIN = load_font(24)
-FONT_DETAIL = load_font(16)
 FONT_META = load_font(15, mono=True)
 
 
@@ -78,11 +77,10 @@ def make_frame(index: int) -> Image.Image:
             fill=color,
         )
 
-    label, title, detail = CAPTIONS[index]
+    label, title = CAPTIONS[index]
     draw.text((28, SCREEN_HEIGHT + 30), f"[{index + 1:02d}/06] {label}", font=FONT_META, fill=SECONDARY)
     draw.text((166, SCREEN_HEIGHT + 25), title, font=FONT_MAIN, fill=PRIMARY)
-    draw.text((166, SCREEN_HEIGHT + 62), detail, font=FONT_DETAIL, fill=SECONDARY)
-    draw.text((789, SCREEN_HEIGHT + 70), "relay.xueai.pro", font=FONT_META, fill=SECONDARY)
+    draw.text((789, SCREEN_HEIGHT + 32), "relay.xueai.pro", font=FONT_META, fill=SECONDARY)
     return frame
 
 

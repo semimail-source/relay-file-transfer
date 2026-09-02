@@ -6,7 +6,7 @@
 
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fsemimail-source%2Frelay-file-transfer)
 
-![Relay browser file transfer demo](docs/relay-demo.gif)
+![Relay browser file transfer demo](docs/relay-demo-v2.gif)
 
 Relay is an open-source, browser-only file transfer tool for Windows, macOS,
 iPhone, iPad, and Android. Select one or more files and share a one-time link,
