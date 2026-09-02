@@ -2,6 +2,8 @@ const pickupForm = document.querySelector("#pickup-form");
 const pickupInput = document.querySelector("#pickup-input");
 const pickupButton = document.querySelector("#pickup-submit");
 const pickupError = document.querySelector("#pickup-error");
+const pickupLanguage = window.RelayI18n.lang;
+const t = (key, zh) => window.RelayI18n.t(key, { zh });
 
 pickupInput.addEventListener("input", () => {
   pickupInput.value = RelayPickup.formatCode(pickupInput.value);
@@ -12,13 +14,13 @@ pickupForm.addEventListener("submit", async event => {
   event.preventDefault();
   const code = RelayPickup.normalizeCode(pickupInput.value);
   if (!RelayPickup.isValidCode(code)) {
-    pickupError.textContent = "请输入完整的英文名字和 6 位数字。";
+    pickupError.textContent = t("pickup.invalid", "请输入完整的英文名字和 6 位数字。");
     pickupInput.focus();
     return;
   }
 
   pickupButton.disabled = true;
-  pickupButton.querySelector("span:first-child").textContent = "正在查找文件";
+  pickupButton.querySelector("span:first-child").textContent = t("pickup.searching", "正在查找文件");
   pickupError.textContent = "";
   try {
     const pickupCodeHash = await RelayPickup.lookupHash(code);
@@ -35,15 +37,15 @@ pickupForm.addEventListener("submit", async event => {
       code: result.code,
       verify: result.verificationRequired ? "1" : "0"
     });
-    window.location.replace(`/?room=${encodeURIComponent(result.roomId)}#${fragment}`);
+    window.location.replace(`/?room=${encodeURIComponent(result.roomId)}&lang=${pickupLanguage}#${fragment}`);
   } catch (error) {
     const messages = {
-      pickup_not_found: "取件码错误、已过期或尚未生成，请向发送方确认。",
-      room_claimed: "这批文件已被另一台设备领取。",
-      rate_limited: "尝试次数过多，请 10 分钟后再试。"
+      pickup_not_found: t("pickup.notFound", "取件码错误、已过期或尚未生成，请向发送方确认。"),
+      room_claimed: t("pickup.claimed", "这批文件已被另一台设备领取。"),
+      rate_limited: t("pickup.rateLimited", "尝试次数过多，请 10 分钟后再试。")
     };
-    pickupError.textContent = messages[error.message] || "暂时无法取件，请稍后重试。";
+    pickupError.textContent = messages[error.message] || t("pickup.failed", "暂时无法取件，请稍后重试。");
     pickupButton.disabled = false;
-    pickupButton.querySelector("span:first-child").textContent = "提取文件";
+    pickupButton.querySelector("span:first-child").textContent = t("pickup.submit", "提取文件");
   }
 });

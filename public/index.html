@@ -4,110 +4,112 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#f4f1e8">
-    <title>Relay — 浏览器里的文件直传</title>
-    <link rel="stylesheet" href="/styles.css">
+    <title data-i18n="meta.homeTitle">Relay — 浏览器里的文件直传</title>
+    <link rel="stylesheet" href="/styles.css?v=3">
+    <script src="/i18n.js?v=3" defer></script>
     <script src="/qrcode.bundle.js" defer></script>
     <script src="/crypto.js" defer></script>
     <script src="/pickup-crypto.js" defer></script>
-    <script src="/app.js" defer></script>
+    <script src="/app.js?v=3" defer></script>
   </head>
   <body>
     <div class="ambient ambient-one"></div>
     <div class="ambient ambient-two"></div>
 
     <header class="site-header">
-      <a class="brand" href="/" aria-label="Relay 首页">
+      <a class="brand" href="/" aria-label="Relay 首页" data-i18n-aria="common.homeAria" data-language-link>
         <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
         <span>Relay</span>
       </a>
       <div class="header-actions">
-        <a class="pickup-nav" href="/pickup">输入取件码</a>
-        <div class="privacy-pill"><span></span> 端到端加密 · 不存文件</div>
+        <a class="pickup-nav" href="/pickup" data-i18n="nav.pickup" data-language-link>输入取件码</a>
+        <button id="language-toggle" class="language-toggle" type="button">English</button>
+        <div class="privacy-pill"><span></span> <span data-i18n="common.security">端到端加密 · 不存文件</span></div>
       </div>
     </header>
 
     <main>
       <section id="sender-start" class="hero view">
         <div class="hero-copy">
-          <p class="eyebrow">浏览器里的文件直传</p>
-          <h1>把大文件，<br><em>轻轻递过去。</em></h1>
-          <p class="lede">任意设备选择文件，另一台设备只需打开网址。文件直接在两台浏览器之间传输，不经过邮件，也不占用网盘。</p>
-          <div class="feature-row" aria-label="产品特点">
-            <span>无需安装</span><i></i><span>跨设备直传</span><i></i><span>一次性链接</span>
+          <p class="eyebrow" data-i18n="home.eyebrow">浏览器里的文件直传</p>
+          <h1 data-i18n-html="home.title">把大文件，<br><em>轻轻递过去。</em></h1>
+          <p class="lede" data-i18n="home.lede">任意设备选择文件，另一台设备只需打开网址。文件直接在两台浏览器之间传输，不经过邮件，也不占用网盘。</p>
+          <div class="feature-row" aria-label="产品特点" data-i18n-aria="home.featuresAria">
+            <span data-i18n="home.featureInstall">无需安装</span><i></i><span data-i18n="home.featureDevices">跨设备直传</span><i></i><span data-i18n="home.featureOnce">一次性链接</span>
           </div>
         </div>
 
-        <section id="task-hub" class="task-hub hidden" aria-label="发送任务中心">
+        <section id="task-hub" class="task-hub hidden" aria-label="发送任务中心" data-i18n-aria="tasks.aria">
           <div class="task-hub-header">
             <div>
-              <span class="step-label">发送任务中心</span>
-              <strong>在一个页面管理多次传输</strong>
+              <span class="step-label" data-i18n="tasks.label">发送任务中心</span>
+              <strong data-i18n="tasks.title">在一个页面管理多次传输</strong>
             </div>
-            <button id="add-sender-task" class="add-task-button" type="button"><span aria-hidden="true">＋</span> 新增发送任务</button>
+            <button id="add-sender-task" class="add-task-button" type="button"><span aria-hidden="true">＋</span> <span data-i18n="tasks.add">新增发送任务</span></button>
           </div>
-          <div id="task-tabs" class="task-tabs" role="tablist" aria-label="发送任务"></div>
+          <div id="task-tabs" class="task-tabs" role="tablist" aria-label="发送任务" data-i18n-aria="tasks.tabsAria"></div>
           <div id="task-panels" class="task-panels"></div>
-          <p class="task-hub-note">切换任务不会中断传输；每个任务的文件、取件码和加密连接彼此独立。</p>
+          <p class="task-hub-note" data-i18n="tasks.note">切换任务不会中断传输；每个任务的文件、取件码和加密连接彼此独立。</p>
         </section>
 
         <div id="sender-task-editor" class="transfer-card">
-          <div class="card-topline"><span class="step-label">01 / 选择文件</span><span class="device-label">任意设备 → 任意设备</span></div>
+          <div class="card-topline"><span class="step-label" data-i18n="sender.stepSelect">01 / 选择文件</span><span class="device-label" data-i18n="sender.devices">任意设备 → 任意设备</span></div>
           <label id="drop-zone" class="drop-zone" for="file-input">
             <input id="file-input" type="file" multiple>
             <span class="file-orbit" aria-hidden="true"><span class="file-icon"><span></span></span></span>
-            <strong id="drop-title">拖入文件，或点击选择多个</strong>
-            <span id="drop-hint">文件不会上传到 Relay 服务器</span>
+            <strong id="drop-title" data-i18n="sender.drop">拖入文件，或点击选择多个</strong>
+            <span id="drop-hint" data-i18n="sender.dropHint">文件不会上传到 Relay 服务器</span>
           </label>
           <div id="selected-file" class="selected-file hidden">
             <span class="selected-icon" aria-hidden="true">↗</span>
             <span class="selected-copy"><strong id="selected-name"></strong><small id="selected-size"></small><small id="selected-list" class="file-names"></small></span>
-            <button id="remove-file" type="button" class="icon-button" aria-label="移除全部文件">×</button>
+            <button id="remove-file" type="button" class="icon-button" aria-label="移除全部文件" data-i18n-aria="sender.removeAria">×</button>
           </div>
           <div class="pickup-name-field">
-            <label for="pickup-name"><span>英文名字</span><small>4–6 位英文字母</small></label>
-            <input id="pickup-name" type="text" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="例如 EMMA" aria-describedby="pickup-name-help">
-            <small id="pickup-name-help">系统会自动追加 6 位随机数字，例如 EMMA-482731；领取一次后立即失效</small>
+            <label for="pickup-name"><span data-i18n="sender.name">英文名字</span><small data-i18n="sender.nameRule">4–6 位英文字母</small></label>
+            <input id="pickup-name" type="text" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="例如 EMMA" data-i18n-placeholder="sender.namePlaceholder" aria-describedby="pickup-name-help">
+            <small id="pickup-name-help" data-i18n="sender.nameHelp">系统会自动追加 6 位随机数字，例如 EMMA-482731；领取一次后立即失效</small>
           </div>
           <label class="verification-option" for="verification-required">
             <input id="verification-required" type="checkbox">
-            <span><strong>需要验证码确认</strong><small>可选；开启后，发送方核对六位验证码才会连接</small></span>
+            <span><strong data-i18n="sender.verifyTitle">需要验证码确认</strong><small data-i18n="sender.verifyHelp">可选；开启后，发送方核对六位验证码才会连接</small></span>
           </label>
-          <button id="create-room" class="primary-button" type="button" disabled><span>生成一次性接收网址</span><span aria-hidden="true">→</span></button>
+          <button id="create-room" class="primary-button" type="button" disabled><span data-i18n="sender.create">生成一次性接收网址</span><span aria-hidden="true">→</span></button>
           <p id="start-error" class="error-message" role="alert"></p>
         </div>
       </section>
 
       <section id="sender-share" class="share-layout view hidden">
         <div class="share-intro">
-          <p class="eyebrow">等待接收设备</p>
-          <h1>把网址，<br><em>发给对方。</em></h1>
-          <p id="share-instruction" class="lede">对方确认收到后，20 分钟接收倒计时才会开始。</p>
-          <button id="cancel-room" class="text-button" type="button">取消本次传输</button>
+          <p class="eyebrow" data-i18n="share.eyebrow">等待接收设备</p>
+          <h1 data-i18n-html="share.title">把网址，<br><em>发给对方。</em></h1>
+          <p id="share-instruction" class="lede" data-i18n="share.instruction">对方确认收到后，20 分钟接收倒计时才会开始。</p>
+          <button id="cancel-room" class="text-button" type="button" data-i18n="share.cancel">取消本次传输</button>
         </div>
 
         <div class="share-stack">
           <article class="qr-card">
-            <div class="card-topline"><span class="step-label">02 / 打开网址</span><span id="room-code" class="room-code">一次有效</span></div>
-            <div class="qr-shell"><img id="qr-image" alt="一次性接收链接二维码"></div>
-            <div class="link-row"><span id="receiver-link"></span><button id="copy-link" class="copy-button" type="button">复制链接</button></div>
+            <div class="card-topline"><span class="step-label" data-i18n="share.stepOpen">02 / 打开网址</span><span id="room-code" class="room-code" data-i18n="share.once">一次有效</span></div>
+            <div class="qr-shell"><img id="qr-image" alt="一次性接收链接二维码" data-i18n-alt="share.qrAlt"></div>
+            <div class="link-row"><span id="receiver-link"></span><button id="copy-link" class="copy-button" type="button" data-i18n="share.copyLink">复制链接</button></div>
             <div class="pickup-share">
-              <span>也可以让对方打开 <a id="pickup-url" href="/pickup" target="_blank" rel="noopener">固定取件页</a></span>
-              <div><strong id="pickup-code">----</strong><button id="copy-pickup-code" class="copy-button" type="button">复制取件码</button></div>
+              <span><span data-i18n="share.pickupPrefix">也可以让对方打开</span> <a id="pickup-url" href="/pickup" target="_blank" rel="noopener" data-i18n="share.pickupPage">固定取件页</a></span>
+              <div><strong id="pickup-code">----</strong><button id="copy-pickup-code" class="copy-button" type="button" data-i18n="share.copyCode">复制取件码</button></div>
             </div>
           </article>
 
           <article class="status-card">
             <div class="status-orb" id="sender-orb"><span></span></div>
             <div class="status-copy">
-              <span id="sender-kicker">等待对方打开网址</span>
-              <strong id="sender-status">保持这个页面打开</strong>
-              <small id="sender-detail">未确认最长等待 24 小时；确认后仅保留 20 分钟</small>
+              <span id="sender-kicker" data-i18n="status.waitingKicker">等待对方打开网址</span>
+              <strong id="sender-status" data-i18n="status.keepOpen">保持这个页面打开</strong>
+              <small id="sender-detail" data-i18n="status.waitingDetail">未确认最长等待 24 小时；确认后仅保留 20 分钟</small>
             </div>
-            <div id="sender-expiry" class="expiry-badge hidden"><span>本次接收剩余</span><strong id="sender-expiry-time">20:00</strong></div>
+            <div id="sender-expiry" class="expiry-badge hidden"><span data-i18n="status.remaining">本次接收剩余</span><strong id="sender-expiry-time">20:00</strong></div>
             <div id="sender-pairing" class="pairing-panel hidden">
-              <span>核对接收设备上的验证码</span>
+              <span data-i18n="status.verifyPrompt">核对接收设备上的验证码</span>
               <strong id="sender-pair-code">000 000</strong>
-              <button id="approve-receiver" type="button">验证码一致，允许连接</button>
+              <button id="approve-receiver" type="button" data-i18n="status.approve">验证码一致，允许连接</button>
             </div>
             <span id="sender-percent" class="status-percent">···</span>
             <div class="progress-track"><span id="sender-progress"></span></div>
@@ -117,23 +119,23 @@
 
       <section id="receiver-view" class="receiver-layout view hidden">
         <div class="receiver-card">
-          <div class="receiver-brand"><span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span><span>来自 Relay</span></div>
+          <div class="receiver-brand"><span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span><span data-i18n="receiver.from">来自 Relay</span></div>
           <div id="receiver-animation" class="receive-animation"><span></span><span></span><span></span><i>↓</i></div>
-          <p id="receiver-kicker" class="eyebrow">正在使用一次性链接</p>
-          <h1 id="receiver-title">请稍候，<br><em>正在安全配对。</em></h1>
-          <p id="receiver-message" class="receiver-message">此页面需要保持打开，直到你保存文件。</p>
+          <p id="receiver-kicker" class="eyebrow" data-i18n="receiver.linkKicker">正在使用一次性链接</p>
+          <h1 id="receiver-title" data-i18n-html="receiver.initialTitle">请稍候，<br><em>正在安全配对。</em></h1>
+          <p id="receiver-message" class="receiver-message" data-i18n="receiver.initialMessage">此页面需要保持打开，直到你保存文件。</p>
 
           <div id="receipt-confirmation" class="receipt-confirmation hidden">
-            <button id="confirm-receipt" type="button">我已收到，开始 20 分钟</button>
-            <small>在你确认以前，不会开始这 20 分钟倒计时</small>
+            <button id="confirm-receipt" type="button" data-i18n="receiver.confirm">我已收到，开始 20 分钟</button>
+            <small data-i18n="receiver.confirmHelp">在你确认以前，不会开始这 20 分钟倒计时</small>
           </div>
 
-          <div id="receiver-expiry" class="expiry-badge receiver-expiry hidden"><span>本次接收剩余</span><strong id="receiver-expiry-time">20:00</strong></div>
+          <div id="receiver-expiry" class="expiry-badge receiver-expiry hidden"><span data-i18n="status.remaining">本次接收剩余</span><strong id="receiver-expiry-time">20:00</strong></div>
 
           <div id="receiver-pairing" class="pairing-panel receiver-pairing hidden">
-            <span>把这个验证码告诉发送方</span>
+            <span data-i18n="receiver.codePrompt">把这个验证码告诉发送方</span>
             <strong id="receiver-pair-code">000 000</strong>
-            <small>发送方确认一致后，才会建立连接</small>
+            <small data-i18n="receiver.codeHelp">发送方确认一致后，才会建立连接</small>
           </div>
 
           <div id="incoming-file" class="incoming-file hidden">
@@ -141,20 +143,20 @@
             <span><strong id="incoming-name"></strong><small id="incoming-size"></small><small id="incoming-list" class="file-names"></small></span>
           </div>
           <p id="incoming-warning" class="warning-message hidden"></p>
-          <button id="accept-file" class="primary-button hidden" type="button"><span>接收这些文件</span><span aria-hidden="true">↓</span></button>
+          <button id="accept-file" class="primary-button hidden" type="button"><span data-i18n="receiver.accept">接收这些文件</span><span aria-hidden="true">↓</span></button>
 
           <div id="receiver-progress-wrap" class="receiver-progress-wrap hidden">
-            <div class="receiver-progress-label"><span id="receiver-progress-label">正在接收并校验</span><strong id="receiver-percent">0%</strong></div>
+            <div class="receiver-progress-label"><span id="receiver-progress-label" data-i18n="receiver.progress">正在接收并校验</span><strong id="receiver-percent">0%</strong></div>
             <div class="progress-track large"><span id="receiver-progress"></span></div>
             <small id="receiver-bytes">0 B / 0 B</small>
           </div>
 
-          <div id="download-list" class="download-list hidden" aria-label="可保存的文件"></div>
+          <div id="download-list" class="download-list hidden" aria-label="可保存的文件" data-i18n-aria="receiver.downloadAria"></div>
           <p id="receiver-error" class="error-message" role="alert"></p>
         </div>
       </section>
     </main>
 
-    <footer><span>AES-GCM 加密 · SHA-256 完整性校验</span><span>未确认最长 24 小时 · 确认后 20 分钟</span></footer>
+    <footer><span data-i18n="common.footerSecurity">AES-GCM 加密 · SHA-256 完整性校验</span><span data-i18n="common.footerTiming">未确认最长 24 小时 · 确认后 20 分钟</span></footer>
   </body>
 </html>

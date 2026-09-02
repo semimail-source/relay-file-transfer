@@ -1,4 +1,7 @@
 const $ = selector => document.querySelector(selector);
+const relayLanguage = window.RelayI18n.lang;
+const withLanguage = window.RelayI18n.withLang;
+const t = (key, zh, variables = {}) => window.RelayI18n.t(key, { ...variables, zh });
 const { Sha256, base64UrlEncode, base64UrlDecode } = window.RelayCrypto;
 const {
   formatCode: formatPickupCode,
@@ -68,20 +71,20 @@ function notifyTaskParent(phase, detail = {}) {
 
 function taskStatusText(phase, detail = {}) {
   const labels = {
-    ready: "等待选择文件",
-    selected: `已选择 ${detail.fileCount || 0} 个文件`,
-    creating: "正在生成入口",
-    waiting: "等待对方打开",
-    opened: "等待对方确认",
-    confirmed: "对方已确认",
-    connecting: "正在建立连接",
-    connected: "等待对方接收",
-    transferring: `传输中 ${detail.percent ?? 0}%`,
-    received: "已接收，等待保存",
-    complete: "已完成",
-    error: "连接遇到问题"
+    ready: t("task.ready", "等待选择文件"),
+    selected: t("task.selected", `已选择 ${detail.fileCount || 0} 个文件`, { count: detail.fileCount || 0 }),
+    creating: t("task.creating", "正在生成入口"),
+    waiting: t("task.waiting", "等待对方打开"),
+    opened: t("task.opened", "等待对方确认"),
+    confirmed: t("task.confirmed", "对方已确认"),
+    connecting: t("task.connecting", "正在建立连接"),
+    connected: t("task.connected", "等待对方接收"),
+    transferring: t("task.transferring", `传输中 ${detail.percent ?? 0}%`, { percent: detail.percent ?? 0 }),
+    received: t("task.received", "已接收，等待保存"),
+    complete: t("task.complete", "已完成"),
+    error: t("task.error", "连接遇到问题")
   };
-  return labels[phase] || "发送任务";
+  return labels[phase] || t("task.default", "发送任务");
 }
 
 function setActiveSenderTask(taskId) {
@@ -114,7 +117,7 @@ function requestSenderTaskRemoval(taskId) {
   const task = taskHubState.tasks.get(taskId);
   if (!task) return;
   const activePhases = new Set(["creating", "waiting", "opened", "confirmed", "connecting", "connected", "transferring", "received"]);
-  if (activePhases.has(task.phase) && !window.confirm("关闭这个任务会停止传输并让取件入口失效。确定关闭吗？")) return;
+  if (activePhases.has(task.phase) && !window.confirm(t("task.closeConfirm", "关闭这个任务会停止传输并让取件入口失效。确定关闭吗？"))) return;
   task.iframe.contentWindow?.postMessage({ type: "relay:cancel-task", taskId }, window.location.origin);
   task.closeTimer = setTimeout(() => finalizeSenderTaskRemoval(taskId), 1200);
 }
@@ -124,7 +127,9 @@ function refreshAddTaskButton() {
   if (!button) return;
   const full = taskHubState.tasks.size >= MAX_SENDER_TASKS;
   button.disabled = full;
-  button.title = full ? `一次最多保留 ${MAX_SENDER_TASKS} 个发送任务` : "在当前页面新增发送任务";
+  button.title = full
+    ? t("task.limit", `一次最多保留 ${MAX_SENDER_TASKS} 个发送任务`, { count: MAX_SENDER_TASKS })
+    : t("task.addTitle", "在当前页面新增发送任务");
 }
 
 function createSenderTask() {
@@ -138,11 +143,11 @@ function createSenderTask() {
   tabButton.type = "button";
   tabButton.className = "task-tab-main";
   tabButton.setAttribute("role", "tab");
-  tabButton.innerHTML = `<span class="task-dot"></span><span class="task-tab-copy"><strong>任务 ${number}</strong><small>等待选择文件</small></span>`;
+  tabButton.innerHTML = `<span class="task-dot"></span><span class="task-tab-copy"><strong>${t("task.number", `任务 ${number}`, { number })}</strong><small>${t("task.ready", "等待选择文件")}</small></span>`;
   const closeButton = document.createElement("button");
   closeButton.type = "button";
   closeButton.className = "task-close";
-  closeButton.setAttribute("aria-label", `关闭任务 ${number}`);
+  closeButton.setAttribute("aria-label", t("task.closeAria", `关闭任务 ${number}`, { number }));
   closeButton.textContent = "×";
   tab.append(tabButton, closeButton);
 
@@ -151,8 +156,8 @@ function createSenderTask() {
   panel.setAttribute("role", "tabpanel");
   const iframe = document.createElement("iframe");
   iframe.className = "task-frame";
-  iframe.title = `发送任务 ${number}`;
-  iframe.src = `/?embedded=1&senderTask=${encodeURIComponent(taskId)}`;
+  iframe.title = t("task.frameTitle", `发送任务 ${number}`, { number });
+  iframe.src = `/?embedded=1&senderTask=${encodeURIComponent(taskId)}&lang=${relayLanguage}`;
   iframe.setAttribute("allow", "clipboard-write");
   panel.append(iframe);
 
@@ -235,7 +240,7 @@ function startExpiryCountdown(expiresAt) {
       stopPolling();
       stopRelayMonitoring();
       state.peer?.close();
-      showConnectionError(new Error("本次 20 分钟接收时间已结束，请让发送方重新生成。"));
+      showConnectionError(new Error(t("error.expiredWindow", "本次 20 分钟接收时间已结束，请让发送方重新生成。")));
       return;
     }
     state.expiryTimer = setTimeout(tick, Math.min(1000, remaining));
@@ -256,8 +261,8 @@ function totalSize(files) {
 }
 
 function fileNameSummary(files, limit = 4) {
-  const names = files.slice(0, limit).map(file => safeFilename(file.name)).join("、");
-  return files.length > limit ? `${names} 等 ${files.length} 个` : names;
+  const names = files.slice(0, limit).map(file => safeFilename(file.name)).join(relayLanguage === "en" ? ", " : "、");
+  return files.length > limit ? t("files.more", `${names} 等 ${files.length} 个`, { names, count: files.length }) : names;
 }
 
 function refreshCreateButton() {
@@ -270,10 +275,12 @@ function setSelectedFiles(fileList) {
   $("#selected-file").classList.toggle("hidden", files.length === 0);
   refreshCreateButton();
   $("#drop-zone").classList.toggle("hidden", files.length > 0);
-  $("#start-error").textContent = Array.from(fileList || []).length > MAX_FILES ? `一次最多选择 ${MAX_FILES} 个文件。` : "";
+  $("#start-error").textContent = Array.from(fileList || []).length > MAX_FILES
+    ? t("files.limit", `一次最多选择 ${MAX_FILES} 个文件。`, { count: MAX_FILES })
+    : "";
   if (files.length) {
-    $("#selected-name").textContent = files.length === 1 ? safeFilename(files[0].name) : `已选择 ${files.length} 个文件`;
-    $("#selected-size").textContent = `${formatBytes(totalSize(files))} · 总大小`;
+    $("#selected-name").textContent = files.length === 1 ? safeFilename(files[0].name) : t("files.selected", `已选择 ${files.length} 个文件`, { count: files.length });
+    $("#selected-size").textContent = t("files.total", `${formatBytes(totalSize(files))} · 总大小`, { size: formatBytes(totalSize(files)) });
     $("#selected-list").textContent = fileNameSummary(files);
   }
   notifyTaskParent(files.length ? "selected" : "ready", { fileCount: files.length });
@@ -310,7 +317,7 @@ function chunkIv(prefix, index) {
 }
 
 async function sendSecure(type, payload) {
-  if (state.channel?.readyState !== "open") throw new Error("连接已经关闭。");
+  if (state.channel?.readyState !== "open") throw new Error(t("error.channelClosed", "连接已经关闭。"));
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const plaintext = new TextEncoder().encode(JSON.stringify({ type, payload }));
   const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: roomAdditionalData() }, state.cryptoKey, plaintext);
@@ -319,7 +326,7 @@ async function sendSecure(type, payload) {
 
 async function decryptSecure(value) {
   const envelope = JSON.parse(value);
-  if (envelope.secure !== 1 || typeof envelope.iv !== "string" || typeof envelope.data !== "string") throw new Error("收到无效的加密消息。");
+  if (envelope.secure !== 1 || typeof envelope.iv !== "string" || typeof envelope.data !== "string") throw new Error(t("error.invalidEncryptedMessage", "收到无效的加密消息。"));
   const plaintext = await crypto.subtle.decrypt(
     { name: "AES-GCM", iv: base64UrlDecode(envelope.iv), additionalData: roomAdditionalData() },
     state.cryptoKey,
@@ -341,13 +348,13 @@ async function getIceConfiguration() {
   if (!result.relayAvailable) {
     const detail = state.role === "sender" ? $("#sender-detail") : $("#receiver-message");
     const messages = {
-      not_configured: "中继尚未配置；同一网络通常可用，不同网络可能无法连接。",
-      environment_disabled: "公网中继安全开关已关闭；同一网络仍可尝试直连。",
-      manual_disabled: "公网中继已由管理员关闭；同一网络仍可尝试直连。",
-      quota_monitor_unconfigured: "用量保护尚未配置，公网中继保持关闭。",
-      quota_check_failed: "无法确认中继用量，为避免费用已暂停公网中继。",
-      quota_reached: "本月中继已达到安全线，公网中继自动关闭。",
-      relay_unavailable: "公网中继暂时不可用；同一网络仍可尝试直连。"
+      not_configured: t("relay.notConfigured", "中继尚未配置；同一网络通常可用，不同网络可能无法连接。"),
+      environment_disabled: t("relay.environmentDisabled", "公网中继安全开关已关闭；同一网络仍可尝试直连。"),
+      manual_disabled: t("relay.manualDisabled", "公网中继已由管理员关闭；同一网络仍可尝试直连。"),
+      quota_monitor_unconfigured: t("relay.monitorMissing", "用量保护尚未配置，公网中继保持关闭。"),
+      quota_check_failed: t("relay.checkFailed", "无法确认中继用量，为避免费用已暂停公网中继。"),
+      quota_reached: t("relay.quotaReached", "本月中继已达到安全线，公网中继自动关闭。"),
+      relay_unavailable: t("relay.unavailable", "公网中继暂时不可用；同一网络仍可尝试直连。")
     };
     detail.textContent = messages[result.relayReason] || messages.not_configured;
   }
@@ -367,13 +374,13 @@ function startRelayMonitoring() {
       if (!status.enabled) {
         stopRelayMonitoring();
         state.peer?.close();
-        showConnectionError(new Error("公网中继安全保护已触发，当前连接已停止。请下月或开启中继后重新传输。"));
+        showConnectionError(new Error(t("error.relayStopped", "公网中继安全保护已触发，当前连接已停止。请下月或开启中继后重新传输。")));
         return;
       }
     } catch (_) {
       stopRelayMonitoring();
       state.peer?.close();
-      showConnectionError(new Error("无法确认公网中继用量，为避免费用，当前连接已停止。"));
+      showConnectionError(new Error(t("error.relayUsage", "无法确认公网中继用量，为避免费用，当前连接已停止。")));
       return;
     }
     state.relayMonitorTimer = setTimeout(tick, 60_000);
@@ -393,15 +400,15 @@ async function makePeer(role) {
     clearTimeout(state.disconnectTimer);
     if (peer.connectionState === "connected" && role === "sender") {
       $("#sender-orb").classList.add("connected");
-      $("#sender-kicker").textContent = "接收设备已连接";
-      $("#sender-status").textContent = "等待对方确认文件";
-      $("#sender-detail").textContent = "连接已加密，文件尚未开始传输";
+      $("#sender-kicker").textContent = t("sender.connectedKicker", "接收设备已连接");
+      $("#sender-status").textContent = t("sender.waitAccept", "等待对方确认文件");
+      $("#sender-detail").textContent = t("sender.encryptedNotStarted", "连接已加密，文件尚未开始传输");
       notifyTaskParent("connected");
     } else if (peer.connectionState === "failed") {
-      showConnectionError(new Error("无法建立直连。请检查网络，或确认公网中继已经配置。"));
+      showConnectionError(new Error(t("error.directFailed", "无法建立直连。请检查网络，或确认公网中继已经配置。")));
     } else if (peer.connectionState === "disconnected") {
       state.disconnectTimer = setTimeout(() => {
-        if (peer.connectionState === "disconnected") showConnectionError(new Error("连接已中断，请重新传输。"));
+        if (peer.connectionState === "disconnected") showConnectionError(new Error(t("error.disconnected", "连接已中断，请重新传输。")));
       }, 5000);
     }
   });
@@ -431,7 +438,7 @@ function startPolling(onSignal) {
       }
     } catch (error) {
       if (["room_not_found", "unauthorized"].includes(error.message)) {
-        showConnectionError(new Error("这个一次性入口已经失效。"));
+        showConnectionError(new Error(t("error.entryExpired", "这个一次性入口已经失效。")));
         return;
       }
     }
@@ -477,19 +484,19 @@ function wireSenderChannel(channel) {
         if (Number.isInteger(index) && message.payload?.sha256 === state.sentHashes.get(index)) state.receivedAcks.add(index);
         if (state.receivedAcks.size === state.files.length) {
           $("#sender-orb").classList.add("complete");
-          $("#sender-kicker").textContent = "对方已完整接收";
-          $("#sender-status").textContent = `${state.files.length} 个文件均已校验`;
-          $("#sender-detail").textContent = "等待对方逐个点击保存，请暂时保持页面打开";
+          $("#sender-kicker").textContent = t("sender.receivedKicker", "对方已完整接收");
+          $("#sender-status").textContent = t("sender.filesVerified", `${state.files.length} 个文件均已校验`, { count: state.files.length });
+          $("#sender-detail").textContent = t("sender.waitSave", "等待对方逐个点击保存，请暂时保持页面打开");
           notifyTaskParent("received");
         }
       }
       if (message.type === "save-clicked") {
         const index = message.payload?.index;
         if (Number.isInteger(index) && index >= 0 && index < state.files.length) state.savedAcks.add(index);
-        $("#sender-kicker").textContent = `对方已点击保存 ${state.savedAcks.size} / ${state.files.length}`;
+        $("#sender-kicker").textContent = t("sender.savedCount", `对方已点击保存 ${state.savedAcks.size} / ${state.files.length}`, { saved: state.savedAcks.size, total: state.files.length });
         if (state.savedAcks.size === state.files.length) {
-          $("#sender-status").textContent = "现在可以关闭页面";
-          $("#sender-detail").textContent = "系统无法读取对方磁盘状态；这里只确认每个保存按钮均已点击";
+          $("#sender-status").textContent = t("sender.canClose", "现在可以关闭页面");
+          $("#sender-detail").textContent = t("sender.saveCaveat", "系统无法读取对方磁盘状态；这里只确认每个保存按钮均已点击");
           notifyTaskParent("complete");
           deleteRoom().catch(() => {});
         }
@@ -501,7 +508,7 @@ function wireSenderChannel(channel) {
 async function waitForBuffer(channel) {
   if (channel.bufferedAmount <= 2 * 1024 * 1024) return;
   await new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error("发送缓冲区响应超时。")), 20_000);
+    const timeout = setTimeout(() => reject(new Error(t("error.bufferTimeout", "发送缓冲区响应超时。"))), 20_000);
     const ready = () => { clearTimeout(timeout); resolve(); };
     channel.addEventListener("bufferedamountlow", ready, { once: true });
   });
@@ -511,8 +518,8 @@ async function sendFiles() {
   state.sending = true;
   const batchSize = totalSize(state.files);
   let batchOffset = 0;
-  $("#sender-kicker").textContent = "正在加密传输";
-  $("#sender-detail").textContent = `${state.files.length} 个文件 · ${formatBytes(batchSize)} · 请保持页面打开`;
+  $("#sender-kicker").textContent = t("sender.transferring", "正在加密传输");
+  $("#sender-detail").textContent = t("sender.transferDetail", `${state.files.length} 个文件 · ${formatBytes(batchSize)} · 请保持页面打开`, { count: state.files.length, size: formatBytes(batchSize) });
   notifyTaskParent("transferring", { percent: 0 });
   for (let fileIndex = 0; fileIndex < state.files.length; fileIndex += 1) {
     const file = state.files[fileIndex];
@@ -530,7 +537,7 @@ async function sendFiles() {
       noncePrefix: base64UrlEncode(noncePrefix)
     });
     while (offset < file.size) {
-      if (state.channel.readyState !== "open") throw new Error("连接已经关闭。");
+      if (state.channel.readyState !== "open") throw new Error(t("error.channelClosed", "连接已经关闭。"));
       await waitForBuffer(state.channel);
       const plain = new Uint8Array(await file.slice(offset, offset + CHUNK_SIZE).arrayBuffer());
       hasher.update(plain);
@@ -558,16 +565,16 @@ async function sendFiles() {
   }
   $("#sender-progress").style.width = "100%";
   $("#sender-percent").textContent = "100%";
-  $("#sender-kicker").textContent = "全部发送完毕，正在校验";
-  $("#sender-status").textContent = `等待确认 ${state.files.length} 个文件`;
-  $("#sender-detail").textContent = "每个文件都通过 SHA-256 校验后，才会显示传输成功";
+  $("#sender-kicker").textContent = t("sender.sentVerifying", "全部发送完毕，正在校验");
+  $("#sender-status").textContent = t("sender.waitVerification", `等待确认 ${state.files.length} 个文件`, { count: state.files.length });
+  $("#sender-detail").textContent = t("sender.hashDetail", "每个文件都通过 SHA-256 校验后，才会显示传输成功");
 }
 
 async function createRoom() {
   if (!state.files.length) return;
   const pickupName = normalizePickupName($("#pickup-name").value);
   if (!isValidPickupName(pickupName)) {
-    $("#start-error").textContent = "请输入 4–6 位英文字母作为名字。";
+    $("#start-error").textContent = t("error.name", "请输入 4–6 位英文字母作为名字。");
     $("#pickup-name").focus();
     return;
   }
@@ -588,23 +595,23 @@ async function createRoom() {
     state.role = "sender";
     state.roomId = room.roomId;
     state.authToken = room.senderToken;
-    const receiverUrl = `${room.receiverBaseUrl}#invite=${encodeURIComponent(room.inviteToken)}&key=${encodeURIComponent(state.transferKeyValue)}`;
+    const receiverUrl = `${withLanguage(room.receiverBaseUrl)}#invite=${encodeURIComponent(room.inviteToken)}&key=${encodeURIComponent(state.transferKeyValue)}`;
     $("#receiver-link").textContent = receiverUrl;
-    $("#pickup-url").textContent = room.pickupUrl;
-    $("#pickup-url").href = room.pickupUrl;
+    $("#pickup-url").textContent = withLanguage(room.pickupUrl);
+    $("#pickup-url").href = withLanguage(room.pickupUrl);
     $("#pickup-code").textContent = formatPickupCode(pickupCode);
     notifyTaskParent("waiting", { pickupCode: formatPickupCode(pickupCode), fileCount: state.files.length });
     $("#share-instruction").textContent = state.verificationRequired
-      ? "对方确认收到后才开始 20 分钟倒计时；再核对六位验证码，文件才会连接。"
-      : "对方确认收到后才开始 20 分钟倒计时，随后会自动建立加密连接。";
+      ? t("share.verifyInstruction", "对方确认收到后才开始 20 分钟倒计时；再核对六位验证码，文件才会连接。")
+      : t("share.autoInstruction", "对方确认收到后才开始 20 分钟倒计时，随后会自动建立加密连接。");
     $("#qr-image").src = await QRCode.toDataURL(receiverUrl, { width: 560, margin: 1, errorCorrectionLevel: "M", color: { dark: "#10201b", light: "#ffffff" } });
     showView("#sender-share");
     startPolling(handleSenderSignal);
   } catch (error) {
     showView("#sender-start");
     $("#start-error").textContent = error.message === "pickup_code_unavailable"
-      ? "随机取件码发生冲突，请再点一次生成。"
-      : "无法创建传输入口，请稍后重试。";
+      ? t("error.codeConflict", "随机取件码发生冲突，请再点一次生成。")
+      : t("error.create", "无法创建传输入口，请稍后重试。");
     refreshCreateButton();
     notifyTaskParent("error");
   }
@@ -614,25 +621,25 @@ async function handleSenderSignal(message) {
   if (message.type === "join") {
     state.receiverNeedsKey = message.data.pickup === true;
     state.pairingCode = message.data.code;
-    $("#sender-kicker").textContent = "有设备打开了链接";
+    $("#sender-kicker").textContent = t("sender.openedKicker", "有设备打开了链接");
     $("#sender-pairing").classList.add("hidden");
-    $("#sender-status").textContent = "等待对方确认收到";
-    $("#sender-detail").textContent = "对方点击确认后，20 分钟倒计时才开始";
+    $("#sender-status").textContent = t("sender.waitConfirmation", "等待对方确认收到");
+    $("#sender-detail").textContent = t("sender.timerAfterConfirm", "对方点击确认后，20 分钟倒计时才开始");
     notifyTaskParent("opened");
   } else if (message.type === "confirmed") {
     state.receiptConfirmed = true;
     startExpiryCountdown(message.data.expiresAt);
     notifyTaskParent("confirmed");
-    $("#sender-kicker").textContent = "对方已确认收到";
+    $("#sender-kicker").textContent = t("sender.confirmedKicker", "对方已确认收到");
     if (state.verificationRequired) {
       $("#sender-pair-code").textContent = formatCode(state.pairingCode);
       $("#sender-pairing").classList.remove("hidden");
-      $("#sender-status").textContent = "请核对验证码";
-      $("#sender-detail").textContent = "验证码一致后允许连接；倒计时已经开始";
+      $("#sender-status").textContent = t("sender.checkCode", "请核对验证码");
+      $("#sender-detail").textContent = t("sender.checkCodeDetail", "验证码一致后允许连接；倒计时已经开始");
     } else {
       $("#sender-pairing").classList.add("hidden");
-      $("#sender-status").textContent = "正在自动建立连接";
-      $("#sender-detail").textContent = "本次传输未启用额外验证码";
+      $("#sender-status").textContent = t("sender.autoConnecting", "正在自动建立连接");
+      $("#sender-detail").textContent = t("sender.noExtraCode", "本次传输未启用额外验证码");
       await approveReceiver();
     }
   } else if (message.type === "answer") {
@@ -655,8 +662,8 @@ async function approveReceiver() {
     await peer.setLocalDescription(offer);
     await postSignal("offer", peer.localDescription.toJSON());
     $("#sender-pairing").classList.add("hidden");
-    $("#sender-kicker").textContent = "正在建立加密连接";
-    $("#sender-status").textContent = "请稍候";
+    $("#sender-kicker").textContent = t("sender.secureConnecting", "正在建立加密连接");
+    $("#sender-status").textContent = t("common.wait", "请稍候");
     notifyTaskParent("connecting");
   } catch (error) {
     button.disabled = false;
@@ -697,23 +704,23 @@ function wireReceiverChannel(channel) {
   channel.binaryType = "arraybuffer";
   channel.addEventListener("open", () => {
     $("#receiver-pairing").classList.add("hidden");
-    $("#receiver-kicker").textContent = "已建立端到端加密连接";
-    $("#receiver-message").textContent = "正在等待发送方提供文件信息。";
+    $("#receiver-kicker").textContent = t("receiver.connectedKicker", "已建立端到端加密连接");
+    $("#receiver-message").textContent = t("receiver.waitMetadata", "正在等待发送方提供文件信息。");
   });
   channel.addEventListener("message", event => {
     state.receiveQueue = state.receiveQueue.then(async () => {
       if (!state.cryptoKey) {
-        if (typeof event.data !== "string") throw new Error("尚未收到文件加密密钥。");
+        if (typeof event.data !== "string") throw new Error(t("error.keyMissing", "尚未收到文件加密密钥。"));
         let bootstrap;
         try {
           bootstrap = JSON.parse(event.data);
         } catch (_) {
-          throw new Error("收到的加密密钥无效。");
+          throw new Error(t("error.keyInvalid", "收到的加密密钥无效。"));
         }
-        if (bootstrap?.bootstrap !== 1 || typeof bootstrap.key !== "string") throw new Error("收到的加密密钥无效。");
+        if (bootstrap?.bootstrap !== 1 || typeof bootstrap.key !== "string") throw new Error(t("error.keyInvalid", "收到的加密密钥无效。"));
         state.cryptoKey = await importTransferKey(bootstrap.key);
-        $("#receiver-kicker").textContent = "安全密钥已收到";
-        $("#receiver-message").textContent = "正在读取发送方提供的文件信息。";
+        $("#receiver-kicker").textContent = t("receiver.keyReceived", "安全密钥已收到");
+        $("#receiver-message").textContent = t("receiver.readMetadata", "正在读取发送方提供的文件信息。");
         return;
       }
       if (typeof event.data === "string") return handleReceiverControl(await decryptSecure(event.data));
@@ -736,23 +743,23 @@ function validManifestFile(file, index) {
 function showIncomingFiles(manifest) {
   if (!manifest || !Array.isArray(manifest.files) || manifest.files.length < 1 || manifest.files.length > MAX_FILES ||
       manifest.chunkSize !== CHUNK_SIZE || !manifest.files.every(validManifestFile)) {
-    throw new Error("收到的文件清单无效。");
+    throw new Error(t("error.manifest", "收到的文件清单无效。"));
   }
   const files = manifest.files.map(file => ({ ...file, name: safeFilename(file.name) }));
   const calculatedSize = files.reduce((sum, file) => sum + file.size, 0);
-  if (!Number.isSafeInteger(calculatedSize) || calculatedSize !== manifest.totalSize) throw new Error("文件清单大小不一致。");
+  if (!Number.isSafeInteger(calculatedSize) || calculatedSize !== manifest.totalSize) throw new Error(t("error.manifestSize", "文件清单大小不一致。"));
   state.manifest = { files, totalSize: calculatedSize };
-  $("#receiver-kicker").textContent = `发送方想给你 ${files.length} 个文件`;
-  $("#receiver-title").innerHTML = "收到一些文件，<br><em>要接住它们吗？</em>";
-  $("#receiver-message").textContent = "确认名称、数量和总大小后再接收。Relay 不会自动打开文件。";
-  $("#incoming-name").textContent = files.length === 1 ? files[0].name : `${files.length} 个文件`;
-  $("#incoming-size").textContent = `${formatBytes(calculatedSize)} · 总大小`;
+  $("#receiver-kicker").textContent = t("receiver.incomingKicker", `发送方想给你 ${files.length} 个文件`, { count: files.length });
+  $("#receiver-title").innerHTML = t("receiver.incomingTitle", "收到一些文件，<br><em>要接住它们吗？</em>");
+  $("#receiver-message").textContent = t("receiver.review", "确认名称、数量和总大小后再接收。Relay 不会自动打开文件。");
+  $("#incoming-name").textContent = files.length === 1 ? files[0].name : t("receiver.fileCount", `${files.length} 个文件`, { count: files.length });
+  $("#incoming-size").textContent = t("files.total", `${formatBytes(calculatedSize)} · 总大小`, { size: formatBytes(calculatedSize) });
   $("#incoming-list").textContent = fileNameSummary(files);
   $("#incoming-file").classList.remove("hidden");
   $("#accept-file").classList.remove("hidden");
   const dangerousCount = files.filter(file => DANGEROUS_EXTENSIONS.test(file.name)).length;
   if (dangerousCount) {
-    $("#incoming-warning").textContent = `安全提醒：其中 ${dangerousCount} 个是可执行或安装类文件。仅在你信任发送方且确实需要时接收。`;
+    $("#incoming-warning").textContent = t("receiver.danger", `安全提醒：其中 ${dangerousCount} 个是可执行或安装类文件。仅在你信任发送方且确实需要时接收。`, { count: dangerousCount });
     $("#incoming-warning").classList.remove("hidden");
   }
 }
@@ -764,29 +771,29 @@ async function acceptFile() {
   try {
     button.classList.add("hidden");
     $("#receiver-progress-wrap").classList.remove("hidden");
-    $("#receiver-kicker").textContent = "正在加密接收";
-    $("#receiver-title").innerHTML = "文件正在，<br><em>穿过网络。</em>";
-    $("#receiver-message").textContent = "文件会逐个写入浏览器临时存储，请保持页面打开。";
+    $("#receiver-kicker").textContent = t("receiver.receivingKicker", "正在加密接收");
+    $("#receiver-title").innerHTML = t("receiver.receivingTitle", "文件正在，<br><em>穿过网络。</em>");
+    $("#receiver-message").textContent = t("receiver.tempStorage", "文件会逐个写入浏览器临时存储，请保持页面打开。");
     state.accepted = true;
     await sendSecure("accept", null);
   } catch (_) {
     state.accepted = false;
     button.disabled = false;
     button.classList.remove("hidden");
-    $("#receiver-error").textContent = "无法准备本地临时存储。";
+    $("#receiver-error").textContent = t("error.storage", "无法准备本地临时存储。");
   }
 }
 
 async function startIncomingFile(metadata) {
   if (!state.accepted || !state.manifest || !metadata || !Number.isInteger(metadata.index) || metadata.index !== state.currentFileIndex + 1 ||
       metadata.chunkSize !== CHUNK_SIZE || !validManifestFile(metadata, metadata.index)) {
-    throw new Error("收到的文件信息无效。");
+    throw new Error(t("error.fileInfo", "收到的文件信息无效。"));
   }
   const listed = state.manifest.files[metadata.index];
   const name = safeFilename(metadata.name);
-  if (!listed || listed.name !== name || listed.size !== metadata.size || listed.mime !== metadata.mime) throw new Error("文件信息与清单不一致。");
+  if (!listed || listed.name !== name || listed.size !== metadata.size || listed.mime !== metadata.mime) throw new Error(t("error.fileMismatch", "文件信息与清单不一致。"));
   const prefix = base64UrlDecode(metadata.noncePrefix);
-  if (prefix.length !== 4) throw new Error("收到的加密参数无效。");
+  if (prefix.length !== 4) throw new Error(t("error.cryptoParams", "收到的加密参数无效。"));
   state.currentFileIndex = metadata.index;
   state.metadata = { ...metadata, name };
   state.noncePrefix = prefix;
@@ -796,12 +803,12 @@ async function startIncomingFile(metadata) {
   state.sink = await createReceiveSink(state.metadata);
   $("#receiver-progress-label").textContent = `${metadata.index + 1} / ${state.manifest.files.length} · ${name}`;
   $("#receiver-message").textContent = state.sink.mode === "disk"
-    ? "数据正写入浏览器私有临时存储，不会占满内存。"
-    : "当前浏览器使用内存暂存，请保持页面打开。";
+    ? t("receiver.diskBuffer", "数据正写入浏览器私有临时存储，不会占满内存。")
+    : t("receiver.memoryBuffer", "当前浏览器使用内存暂存，请保持页面打开。");
 }
 
 async function receiveEncryptedChunk(value) {
-  if (!state.sink || !state.metadata) throw new Error("文件尚未获得接收许可。");
+  if (!state.sink || !state.metadata) throw new Error(t("error.notAccepted", "文件尚未获得接收许可。"));
   const encrypted = value instanceof Blob ? await value.arrayBuffer() : value;
   const plain = new Uint8Array(await crypto.subtle.decrypt(
     { name: "AES-GCM", iv: chunkIv(state.noncePrefix, state.receivedChunks), additionalData: roomAdditionalData() },
@@ -820,11 +827,11 @@ async function receiveEncryptedChunk(value) {
 }
 
 async function finishIncomingFile(expected) {
-  if (!state.sink || !state.metadata || expected.index !== state.currentFileIndex) throw new Error("文件结束标记无效。");
+  if (!state.sink || !state.metadata || expected.index !== state.currentFileIndex) throw new Error(t("error.endMarker", "文件结束标记无效。"));
   const actualHash = state.receiveHasher.hex();
   if (state.receivedBytes !== state.metadata.size || expected.size !== state.metadata.size ||
       state.receivedChunks !== expected.chunks || actualHash !== expected.sha256) {
-    throw new Error("完整性校验失败，请不要保存，并重新传输。");
+    throw new Error(t("error.integrity", "完整性校验失败，请不要保存，并重新传输。"));
   }
   const result = await state.sink.finish();
   const objectUrl = URL.createObjectURL(result.file);
@@ -835,11 +842,11 @@ async function finishIncomingFile(expected) {
   state.sink = null;
   state.metadata = null;
   if (state.currentFileIndex === state.manifest.files.length - 1) {
-    $("#receiver-progress-label").textContent = "全部接收并校验完成";
+    $("#receiver-progress-label").textContent = t("receiver.allVerified", "全部接收并校验完成");
     $("#receiver-percent").textContent = "100%";
-    $("#receiver-kicker").textContent = "所有文件完好无损";
-    $("#receiver-title").innerHTML = "文件到了，<br><em>请逐个保存。</em>";
-    $("#receiver-message").textContent = "每点击一次保存，发送方都会看到状态；浏览器无法确认磁盘写入结果。";
+    $("#receiver-kicker").textContent = t("receiver.intact", "所有文件完好无损");
+    $("#receiver-title").innerHTML = t("receiver.saveTitle", "文件到了，<br><em>请逐个保存。</em>");
+    $("#receiver-message").textContent = t("receiver.saveMessage", "每点击一次保存，发送方都会看到状态；浏览器无法确认磁盘写入结果。");
     $("#receiver-animation").classList.add("complete");
   }
 }
@@ -856,11 +863,11 @@ function addDownloadItem(index, metadata, objectUrl) {
   const link = document.createElement("a");
   link.href = objectUrl;
   link.download = metadata.name;
-  link.textContent = "保存";
+  link.textContent = t("receiver.save", "保存");
   link.addEventListener("click", () => {
     if (state.downloadClicks.has(index)) return;
     state.downloadClicks.add(index);
-    link.textContent = "已点击";
+    link.textContent = t("receiver.saved", "已点击");
     link.classList.add("saved");
     sendSecure("save-clicked", { index }).catch(() => {});
     if (state.downloadClicks.size === state.manifest.files.length) {
@@ -885,12 +892,14 @@ async function startReceiver(roomId, inviteToken, keyValue) {
     });
     state.authToken = claim.receiverToken;
     state.verificationRequired = claim.verificationRequired === true;
-    history.replaceState(null, "", `${location.pathname}?room=${encodeURIComponent(roomId)}`);
+    history.replaceState(null, "", `${location.pathname}?room=${encodeURIComponent(roomId)}&lang=${relayLanguage}`);
     state.pairingCode = claim.code;
     showReceiptConfirmation();
   } catch (error) {
-    history.replaceState(null, "", location.pathname);
-    const message = error.message === "room_claimed" ? "这个一次性链接已被另一台设备使用。" : "链接无效、已过期或缺少安全密钥。";
+    history.replaceState(null, "", `${location.pathname}?lang=${relayLanguage}`);
+    const message = error.message === "room_claimed"
+      ? t("error.claimed", "这个一次性链接已被另一台设备使用。")
+      : t("error.badLink", "链接无效、已过期或缺少安全密钥。");
     showConnectionError(new Error(message));
   }
 }
@@ -904,19 +913,19 @@ async function startClaimedReceiver(roomId, receiverToken, code, verificationReq
     state.cryptoKey = null;
     state.authToken = receiverToken;
     state.verificationRequired = verificationRequired === true;
-    history.replaceState(null, "", `${location.pathname}?room=${encodeURIComponent(roomId)}`);
+    history.replaceState(null, "", `${location.pathname}?room=${encodeURIComponent(roomId)}&lang=${relayLanguage}`);
     state.pairingCode = code;
     showReceiptConfirmation();
   } catch (_) {
-    history.replaceState(null, "", location.pathname);
-    showConnectionError(new Error("取件会话无效或已经过期，请重新输入取件码。"));
+    history.replaceState(null, "", `${location.pathname}?lang=${relayLanguage}`);
+    showConnectionError(new Error(t("error.badPickupSession", "取件会话无效或已经过期，请重新输入取件码。")));
   }
 }
 
 function showReceiptConfirmation() {
-  $("#receiver-kicker").textContent = "取件入口验证成功";
-  $("#receiver-title").innerHTML = "确认收到，<br><em>再开始计时。</em>";
-  $("#receiver-message").textContent = "点击下面按钮后，发送方会看到确认，20 分钟接收倒计时才会开始。";
+  $("#receiver-kicker").textContent = t("receiver.entryVerified", "取件入口验证成功");
+  $("#receiver-title").innerHTML = t("receiver.confirmTitle", "确认收到，<br><em>再开始计时。</em>");
+  $("#receiver-message").textContent = t("receiver.confirmMessage", "点击下面按钮后，发送方会看到确认，20 分钟接收倒计时才会开始。");
   $("#receiver-pairing").classList.add("hidden");
   $("#receipt-confirmation").classList.remove("hidden");
 }
@@ -933,20 +942,20 @@ async function confirmReceipt() {
     if (state.verificationRequired) {
       $("#receiver-pair-code").textContent = formatCode(state.pairingCode);
       $("#receiver-pairing").classList.remove("hidden");
-      $("#receiver-kicker").textContent = "20 分钟倒计时已开始";
-      $("#receiver-title").innerHTML = "再核对一次，<br><em>就可以接收。</em>";
-      $("#receiver-message").textContent = "请把六位验证码告诉发送方；一致后才会建立连接。";
+      $("#receiver-kicker").textContent = t("receiver.timerStarted", "20 分钟倒计时已开始");
+      $("#receiver-title").innerHTML = t("receiver.codeTitle", "再核对一次，<br><em>就可以接收。</em>");
+      $("#receiver-message").textContent = t("receiver.codeMessage", "请把六位验证码告诉发送方；一致后才会建立连接。");
     } else {
-      $("#receiver-kicker").textContent = "已通知发送方";
-      $("#receiver-title").innerHTML = "确认完成，<br><em>正在安全配对。</em>";
-      $("#receiver-message").textContent = "本次无需验证码，正在建立端到端加密连接。";
+      $("#receiver-kicker").textContent = t("receiver.senderNotified", "已通知发送方");
+      $("#receiver-title").innerHTML = t("receiver.pairTitle", "确认完成，<br><em>正在安全配对。</em>");
+      $("#receiver-message").textContent = t("receiver.pairMessage", "本次无需验证码，正在建立端到端加密连接。");
     }
     startPolling(handleReceiverSignal);
   } catch (error) {
     button.disabled = false;
     $("#receiver-error").textContent = error.message === "room_not_found"
-      ? "这个取件入口已经过期，请让发送方重新生成。"
-      : "暂时无法确认，请稍后再试。";
+      ? t("error.confirmExpired", "这个取件入口已经过期，请让发送方重新生成。")
+      : t("error.confirmFailed", "暂时无法确认，请稍后再试。");
   }
 }
 
@@ -954,8 +963,10 @@ async function handleReceiverSignal(message) {
   if (message.type === "approved") {
     const peer = await makePeer("receiver");
     peer.addEventListener("datachannel", event => wireReceiverChannel(event.channel), { once: true });
-    $("#receiver-kicker").textContent = state.verificationRequired ? "发送方已确认" : "正在建立连接";
-    $("#receiver-message").textContent = "正在建立端到端加密连接。";
+    $("#receiver-kicker").textContent = state.verificationRequired
+      ? t("receiver.senderApproved", "发送方已确认")
+      : t("receiver.connecting", "正在建立连接");
+    $("#receiver-message").textContent = t("receiver.connecting", "正在建立端到端加密连接。");
   } else if (message.type === "offer") {
     const hadPeer = Boolean(state.peer);
     const peer = state.peer || await makePeer("receiver");
@@ -972,11 +983,11 @@ async function handleReceiverSignal(message) {
 
 function showConnectionError(error) {
   stopRelayMonitoring();
-  const message = error?.message || "连接出现问题。";
+  const message = error?.message || t("error.connection", "连接出现问题。");
   if (!$("#receiver-view").classList.contains("hidden")) {
     $("#receiver-error").textContent = message;
   } else {
-    $("#sender-kicker").textContent = "连接遇到问题";
+    $("#sender-kicker").textContent = t("task.error", "连接遇到问题");
     $("#sender-status").textContent = message;
     notifyTaskParent("error");
   }
@@ -996,8 +1007,8 @@ async function copyLink() {
     document.execCommand("copy");
     input.remove();
   }
-  $("#copy-link").textContent = "已复制";
-  setTimeout(() => { $("#copy-link").textContent = "复制链接"; }, 1600);
+  $("#copy-link").textContent = t("common.copied", "已复制");
+  setTimeout(() => { $("#copy-link").textContent = t("share.copyLink", "复制链接"); }, 1600);
 }
 
 async function copyPickupCode() {
@@ -1014,8 +1025,8 @@ async function copyPickupCode() {
     document.execCommand("copy");
     input.remove();
   }
-  $("#copy-pickup-code").textContent = "已复制";
-  setTimeout(() => { $("#copy-pickup-code").textContent = "复制取件码"; }, 1600);
+  $("#copy-pickup-code").textContent = t("common.copied", "已复制");
+  setTimeout(() => { $("#copy-pickup-code").textContent = t("share.copyCode", "复制取件码"); }, 1600);
 }
 
 async function deleteRoom() {
@@ -1034,7 +1045,7 @@ async function cancelRoom() {
     window.parent.postMessage({ type: "relay:task-closed", taskId: embeddedTaskId }, window.location.origin);
     return;
   }
-  window.location.href = "/";
+  window.location.href = withLanguage("/");
 }
 
 function initSender() {
@@ -1090,7 +1101,7 @@ else if (roomId && secrets.get("receiver") && secrets.get("code")) {
 }
 else if (roomId) {
   showView("#receiver-view");
-  showConnectionError(new Error("链接缺少一次性安全密钥，请让发送方重新生成。"));
+  showConnectionError(new Error(t("error.linkKey", "链接缺少一次性安全密钥，请让发送方重新生成。")));
 } else if (isEmbeddedSender) initSender();
 else initTaskHub();
 

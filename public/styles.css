@@ -75,7 +75,8 @@ button:focus-visible, a:focus-visible, .drop-zone:focus-within { outline: 3px so
 
 .header-actions { display: flex; align-items: center; gap: 11px; }
 
-.pickup-nav {
+.pickup-nav,
+.language-toggle {
   padding: 10px 15px;
   border: 1px solid rgba(47, 118, 80, 0.2);
   border-radius: 999px;
@@ -85,6 +86,8 @@ button:focus-visible, a:focus-visible, .drop-zone:focus-within { outline: 3px so
   font-size: 12px;
   font-weight: 750;
 }
+
+.language-toggle { cursor: pointer; }
 
 .brand {
   display: inline-flex;
@@ -833,9 +836,9 @@ body.embedded-sender::before,
 @media (max-width: 620px) {
   .site-header, main, footer { width: min(100% - 28px, 1180px); }
   .site-header { height: 84px; }
-  .privacy-pill { padding: 8px 11px; font-size: 10px; }
+  .privacy-pill { display: none; }
   .header-actions { gap: 7px; }
-  .pickup-nav { padding: 8px 10px; font-size: 10px; }
+  .pickup-nav, .language-toggle { padding: 8px 10px; font-size: 10px; }
   .pickup-main { width: min(100% - 28px, 720px); }
   .pickup-card { margin-top: 22px; padding: 30px 21px; border-radius: 27px; }
   h1 { font-size: 48px; }
