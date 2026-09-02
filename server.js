@@ -5,7 +5,8 @@ const os = require("node:os");
 const crypto = require("node:crypto");
 
 const PUBLIC_DIR = path.join(__dirname, "public");
-const DEFAULT_ROOM_TTL_MS = 2 * 60 * 60 * 1000;
+const DEFAULT_ROOM_TTL_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_CONFIRMED_ROOM_TTL_MS = 20 * 60 * 1000;
 const MAX_SIGNAL_MESSAGES = 240;
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{32,128}$/;
 const PICKUP_HASH_PATTERN = /^[a-f0-9]{64}$/;
@@ -211,6 +212,18 @@ class MemoryRoomStore {
     return Boolean(this.rooms.get(id)?.receiverSessionHash);
   }
 
+  async confirm(id, confirmedAt, expiresAt) {
+    this.clean();
+    const room = this.rooms.get(id);
+    if (!room) return { status: "not_found" };
+    if (!room.receiverSessionHash) return { status: "receiver_not_ready" };
+    const newlyConfirmed = !room.meta.confirmedAt;
+    if (!room.meta.confirmedAt) {
+      room.meta = { ...room.meta, confirmedAt, expiresAt };
+    }
+    return { status: "ok", meta: room.meta, newlyConfirmed };
+  }
+
   async addMessage(id, target, message) {
     this.clean();
     const room = this.rooms.get(id);
@@ -336,6 +349,24 @@ class RedisRoomStore {
 
   async hasReceiver(id) {
     return Boolean(await this.command(["GET", `${this.base(id)}:receiver`]));
+  }
+
+  async confirm(id, confirmedAt, expiresAt) {
+    const meta = await this.getMeta(id);
+    if (!meta) return { status: "not_found" };
+    if (!await this.hasReceiver(id)) return { status: "receiver_not_ready" };
+    if (meta.confirmedAt) return { status: "ok", meta, newlyConfirmed: false };
+    const updated = { ...meta, confirmedAt, expiresAt };
+    const ttl = Math.max(1, Math.ceil((expiresAt - Date.now()) / 1000));
+    const saved = await this.command(["SET", `${this.base(id)}:meta`, JSON.stringify(updated), "EX", ttl, "XX"]);
+    if (saved !== "OK") return { status: "not_found" };
+    const expiringKeys = [
+      `${this.base(id)}:receiver`, `${this.base(id)}:seq`,
+      `${this.base(id)}:signals:sender`, `${this.base(id)}:signals:receiver`,
+      ...(meta.pickupCodeHash ? [this.pickupBase(meta.pickupCodeHash)] : [])
+    ];
+    for (const key of expiringKeys) await this.command(["EXPIRE", key, ttl]);
+    return { status: "ok", meta: updated, newlyConfirmed: true };
   }
 
   async addMessage(id, target, message) {
@@ -580,6 +611,7 @@ function createHandler(options = {}) {
   const store = options.store || defaultStore();
   const port = Number(options.port || process.env.PORT || 8788);
   const roomTtlMs = Number(options.roomTtlMs || process.env.ROOM_TTL_MS || DEFAULT_ROOM_TTL_MS);
+  const confirmedRoomTtlMs = Number(options.confirmedRoomTtlMs || process.env.CONFIRMED_ROOM_TTL_MS || DEFAULT_CONFIRMED_ROOM_TTL_MS);
   const relayOptions = options.relayOptions || {};
   const adminToken = options.adminToken ?? process.env.RELAY_ADMIN_TOKEN ?? "";
 
@@ -632,6 +664,7 @@ function createHandler(options = {}) {
         json(req, res, 200, {
           ok: true,
           roomTtlMinutes: roomTtlMs / 60_000,
+          confirmedRoomTtlMinutes: confirmedRoomTtlMs / 60_000,
           persistentSignaling: store instanceof RedisRoomStore,
           relayConfigured: settings.configured,
           relayEnvironmentEnabled: settings.environmentEnabled,
@@ -781,6 +814,38 @@ function createHandler(options = {}) {
           return;
         }
         json(req, res, 200, await guardedIceConfiguration(store, relayOptions));
+        return;
+      }
+
+      const confirmMatch = pathname.match(/^\/api\/rooms\/([A-Za-z0-9_-]{20,40})\/confirm$/);
+      if (confirmMatch && req.method === "POST") {
+        const auth = await authenticate(req, res, confirmMatch[1]);
+        if (!auth) return;
+        if (auth.role !== "receiver") {
+          json(req, res, 403, { error: "forbidden" });
+          return;
+        }
+        if (!await store.allowRate(`confirm:${confirmMatch[1]}`, 6, 600)) {
+          json(req, res, 429, { error: "rate_limited" });
+          return;
+        }
+        const confirmedAt = Date.now();
+        const result = await store.confirm(confirmMatch[1], confirmedAt, confirmedAt + confirmedRoomTtlMs);
+        if (result.status !== "ok") {
+          json(req, res, result.status === "not_found" ? 404 : 409, { error: result.status });
+          return;
+        }
+        if (result.newlyConfirmed) {
+          await store.addMessage(confirmMatch[1], "sender", {
+            from: "system",
+            type: "confirmed",
+            data: { expiresAt: new Date(result.meta.expiresAt).toISOString() }
+          });
+        }
+        json(req, res, 200, {
+          confirmedAt: new Date(result.meta.confirmedAt).toISOString(),
+          expiresAt: new Date(result.meta.expiresAt).toISOString()
+        });
         return;
       }
 

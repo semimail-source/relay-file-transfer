@@ -30,10 +30,12 @@ never stored by Relay.
 2. Relay creates a link, QR code, and a pickup code such as `EMMA-482731`.
 3. The receiver opens the link or enters the code at
    [`/pickup`](https://relay.xueai.pro/pickup).
-4. Both browsers remain online while the receiver accepts and saves the files.
+4. The receiver confirms the handoff, which starts a 20-minute transfer window.
+5. Both browsers remain online while the receiver accepts and saves the files.
 
 A pickup code is case-insensitive, can be entered without the hyphen, and
-expires immediately after its first claim. Rooms expire after two hours. Relay
+expires immediately after its first claim. An unconfirmed handoff waits for up
+to 24 hours; after confirmation, it expires in 20 minutes. Relay
 does not store files for later download, so it is intentionally different from
 OneDrive or WeTransfer.
 
@@ -81,6 +83,8 @@ environment. Never commit `.env.local`.
 | `TURN_ENABLED=1` | Server-side TURN master switch | TURN control |
 | `TURN_MONTHLY_LIMIT_GB` | Credential cutoff; defaults to `800` | Optional |
 | `PUBLIC_ORIGIN` | Canonical public URL | Optional |
+| `ROOM_TTL_MS` | Maximum wait before receiver confirmation; defaults to 24 hours | Optional |
+| `CONFIRMED_ROOM_TTL_MS` | Transfer window after confirmation; defaults to 20 minutes | Optional |
 
 Keep `TURN_ENABLED=0` until every credential is configured. Then set it to `1`
 and manually enable relay access from `/admin`.

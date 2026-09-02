@@ -78,6 +78,8 @@ test("reports local signaling and TURN configuration", async () => {
   assert.equal(status.relayEnvironmentEnabled, false);
   assert.equal(status.relayAllowed, false);
   assert.equal(status.relayLimitGb, 800);
+  assert.equal(status.roomTtlMinutes, 24 * 60);
+  assert.equal(status.confirmedRoomTtlMinutes, 20);
 });
 
 test("protects the manual relay switch and persists its state", async () => {
@@ -182,8 +184,8 @@ test("creates role secrets, allows one receiver claim, and announces its code", 
   assert.match(room.inviteToken, /^[A-Za-z0-9_-]{32,128}$/);
   assert.equal(room.receiverBaseUrl.includes("#"), false);
   const lifetimeMs = Date.parse(room.expiresAt) - beforeCreate;
-  assert.ok(lifetimeMs > 2 * 60 * 60 * 1000 - 10_000);
-  assert.ok(lifetimeMs <= 2 * 60 * 60 * 1000 + 10_000);
+  assert.ok(lifetimeMs > 24 * 60 * 60 * 1000 - 10_000);
+  assert.ok(lifetimeMs <= 24 * 60 * 60 * 1000 + 10_000);
 
   const first = await claimRoom(room);
   assert.equal(first.response.status, 201);
@@ -200,6 +202,46 @@ test("creates role secrets, allows one receiver claim, and announces its code", 
   assert.equal(result.messages[0].type, "join");
   assert.equal(result.messages[0].data.code, first.body.code);
   assert.equal(result.messages[0].data.pickup, false);
+});
+
+test("starts the 20-minute expiry only when the receiver explicitly confirms", async () => {
+  const room = await createRoom();
+  const claim = await claimRoom(room);
+  const endpoint = `${origin}/api/rooms/${room.roomId}/confirm`;
+
+  const senderAttempt = await fetch(endpoint, {
+    method: "POST",
+    headers: bearer(room.senderToken),
+    body: "{}"
+  });
+  assert.equal(senderAttempt.status, 403);
+
+  const beforeConfirm = Date.now();
+  const confirmation = await fetch(endpoint, {
+    method: "POST",
+    headers: bearer(claim.body.receiverToken),
+    body: "{}"
+  });
+  assert.equal(confirmation.status, 200);
+  const confirmed = await confirmation.json();
+  const confirmedLifetimeMs = Date.parse(confirmed.expiresAt) - beforeConfirm;
+  assert.ok(confirmedLifetimeMs > 20 * 60 * 1000 - 10_000);
+  assert.ok(confirmedLifetimeMs <= 20 * 60 * 1000 + 10_000);
+
+  const messagesEndpoint = `${origin}/api/rooms/${room.roomId}/signals?after=0`;
+  const firstMessages = await fetch(messagesEndpoint, { headers: bearer(room.senderToken) });
+  assert.deepEqual((await firstMessages.json()).messages.map(message => message.type), ["join", "confirmed"]);
+
+  const repeated = await fetch(endpoint, {
+    method: "POST",
+    headers: bearer(claim.body.receiverToken),
+    body: "{}"
+  });
+  assert.equal(repeated.status, 200);
+  assert.equal((await repeated.json()).expiresAt, confirmed.expiresAt);
+
+  const repeatedMessages = await fetch(messagesEndpoint, { headers: bearer(room.senderToken) });
+  assert.deepEqual((await repeatedMessages.json()).messages.map(message => message.type), ["join", "confirmed"]);
 });
 
 test("serves a name-plus-six-digits, case-insensitive pickup-code entry page", async () => {

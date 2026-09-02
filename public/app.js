@@ -44,7 +44,10 @@ const state = {
   objectUrls: [],
   receiveCleanups: [],
   downloadClicks: new Set(),
-  disconnectTimer: null
+  disconnectTimer: null,
+  pairingCode: null,
+  receiptConfirmed: false,
+  expiryTimer: null
 };
 
 function showView(selector) {
@@ -63,6 +66,35 @@ function formatBytes(bytes) {
 function formatCode(code) {
   const value = String(code || "").padStart(6, "0");
   return `${value.slice(0, 3)} ${value.slice(3)}`;
+}
+
+function stopExpiryCountdown() {
+  if (state.expiryTimer) clearTimeout(state.expiryTimer);
+  state.expiryTimer = null;
+}
+
+function startExpiryCountdown(expiresAt) {
+  stopExpiryCountdown();
+  const target = Date.parse(expiresAt);
+  const badge = state.role === "sender" ? $("#sender-expiry") : $("#receiver-expiry");
+  const value = state.role === "sender" ? $("#sender-expiry-time") : $("#receiver-expiry-time");
+  badge.classList.remove("hidden");
+  const tick = () => {
+    const remaining = Math.max(0, target - Date.now());
+    const totalSeconds = Math.ceil(remaining / 1000);
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = String(totalSeconds % 60).padStart(2, "0");
+    value.textContent = `${minutes}:${seconds}`;
+    if (remaining <= 0) {
+      stopPolling();
+      stopRelayMonitoring();
+      state.peer?.close();
+      showConnectionError(new Error("本次 20 分钟接收时间已结束，请让发送方重新生成。"));
+      return;
+    }
+    state.expiryTimer = setTimeout(tick, Math.min(1000, remaining));
+  };
+  tick();
 }
 
 function safeFilename(name) {
@@ -406,8 +438,8 @@ async function createRoom() {
     $("#pickup-url").href = room.pickupUrl;
     $("#pickup-code").textContent = formatPickupCode(pickupCode);
     $("#share-instruction").textContent = state.verificationRequired
-      ? "对方打开后会显示六位验证码。验证码一致时，你再允许连接，文件才会开始传输。"
-      : "对方输入取件码后会自动建立连接，无需再核对验证码。";
+      ? "对方确认收到后才开始 20 分钟倒计时；再核对六位验证码，文件才会连接。"
+      : "对方确认收到后才开始 20 分钟倒计时，随后会自动建立加密连接。";
     $("#qr-image").src = await QRCode.toDataURL(receiverUrl, { width: 560, margin: 1, errorCorrectionLevel: "M", color: { dark: "#10201b", light: "#ffffff" } });
     showView("#sender-share");
     startPolling(handleSenderSignal);
@@ -423,12 +455,20 @@ async function createRoom() {
 async function handleSenderSignal(message) {
   if (message.type === "join") {
     state.receiverNeedsKey = message.data.pickup === true;
+    state.pairingCode = message.data.code;
     $("#sender-kicker").textContent = "有设备打开了链接";
+    $("#sender-pairing").classList.add("hidden");
+    $("#sender-status").textContent = "等待对方确认收到";
+    $("#sender-detail").textContent = "对方点击确认后，20 分钟倒计时才开始";
+  } else if (message.type === "confirmed") {
+    state.receiptConfirmed = true;
+    startExpiryCountdown(message.data.expiresAt);
+    $("#sender-kicker").textContent = "对方已确认收到";
     if (state.verificationRequired) {
-      $("#sender-pair-code").textContent = formatCode(message.data.code);
+      $("#sender-pair-code").textContent = formatCode(state.pairingCode);
       $("#sender-pairing").classList.remove("hidden");
-      $("#sender-status").textContent = "请先核对验证码";
-      $("#sender-detail").textContent = "如果验证码不同，请取消传输";
+      $("#sender-status").textContent = "请核对验证码";
+      $("#sender-detail").textContent = "验证码一致后允许连接；倒计时已经开始";
     } else {
       $("#sender-pairing").classList.add("hidden");
       $("#sender-status").textContent = "正在自动建立连接";
@@ -685,17 +725,8 @@ async function startReceiver(roomId, inviteToken, keyValue) {
     state.authToken = claim.receiverToken;
     state.verificationRequired = claim.verificationRequired === true;
     history.replaceState(null, "", `${location.pathname}?room=${encodeURIComponent(roomId)}`);
-    if (state.verificationRequired) {
-      $("#receiver-pair-code").textContent = formatCode(claim.code);
-      $("#receiver-pairing").classList.remove("hidden");
-      $("#receiver-kicker").textContent = "等待发送方确认";
-      $("#receiver-message").textContent = "请通过电话或消息核对验证码，不要只相信链接来源。";
-    } else {
-      $("#receiver-pairing").classList.add("hidden");
-      $("#receiver-kicker").textContent = "取件入口验证成功";
-      $("#receiver-message").textContent = "本次无需验证码，正在自动建立加密连接。";
-    }
-    startPolling(handleReceiverSignal);
+    state.pairingCode = claim.code;
+    showReceiptConfirmation();
   } catch (error) {
     history.replaceState(null, "", location.pathname);
     const message = error.message === "room_claimed" ? "这个一次性链接已被另一台设备使用。" : "链接无效、已过期或缺少安全密钥。";
@@ -713,19 +744,48 @@ async function startClaimedReceiver(roomId, receiverToken, code, verificationReq
     state.authToken = receiverToken;
     state.verificationRequired = verificationRequired === true;
     history.replaceState(null, "", `${location.pathname}?room=${encodeURIComponent(roomId)}`);
-    $("#receiver-kicker").textContent = "取件码验证成功";
-    if (state.verificationRequired) {
-      $("#receiver-pair-code").textContent = formatCode(code);
-      $("#receiver-pairing").classList.remove("hidden");
-      $("#receiver-message").textContent = "请把六位验证码告诉发送方，核对一致后才会连接。";
-    } else {
-      $("#receiver-pairing").classList.add("hidden");
-      $("#receiver-message").textContent = "本次无需验证码，正在自动建立加密连接。";
-    }
-    startPolling(handleReceiverSignal);
+    state.pairingCode = code;
+    showReceiptConfirmation();
   } catch (_) {
     history.replaceState(null, "", location.pathname);
     showConnectionError(new Error("取件会话无效或已经过期，请重新输入取件码。"));
+  }
+}
+
+function showReceiptConfirmation() {
+  $("#receiver-kicker").textContent = "取件入口验证成功";
+  $("#receiver-title").innerHTML = "确认收到，<br><em>再开始计时。</em>";
+  $("#receiver-message").textContent = "点击下面按钮后，发送方会看到确认，20 分钟接收倒计时才会开始。";
+  $("#receiver-pairing").classList.add("hidden");
+  $("#receipt-confirmation").classList.remove("hidden");
+}
+
+async function confirmReceipt() {
+  const button = $("#confirm-receipt");
+  button.disabled = true;
+  $("#receiver-error").textContent = "";
+  try {
+    const result = await api(`/api/rooms/${encodeURIComponent(state.roomId)}/confirm`, { method: "POST", body: "{}" });
+    state.receiptConfirmed = true;
+    $("#receipt-confirmation").classList.add("hidden");
+    startExpiryCountdown(result.expiresAt);
+    if (state.verificationRequired) {
+      $("#receiver-pair-code").textContent = formatCode(state.pairingCode);
+      $("#receiver-pairing").classList.remove("hidden");
+      $("#receiver-kicker").textContent = "20 分钟倒计时已开始";
+      $("#receiver-title").innerHTML = "再核对一次，<br><em>就可以接收。</em>";
+      $("#receiver-message").textContent = "请把六位验证码告诉发送方；一致后才会建立连接。";
+    } else {
+      $("#receiver-kicker").textContent = "已通知发送方";
+      $("#receiver-title").innerHTML = "确认完成，<br><em>正在安全配对。</em>";
+      $("#receiver-message").textContent = "本次无需验证码，正在建立端到端加密连接。";
+    }
+    startPolling(handleReceiverSignal);
+  } catch (error) {
+    button.disabled = false;
+    $("#receiver-error").textContent = error.message === "room_not_found"
+      ? "这个取件入口已经过期，请让发送方重新生成。"
+      : "暂时无法确认，请稍后再试。";
   }
 }
 
@@ -805,6 +865,7 @@ async function deleteRoom() {
 async function cancelRoom() {
   stopPolling();
   stopRelayMonitoring();
+  stopExpiryCountdown();
   state.peer?.close();
   await deleteRoom().catch(() => {});
   window.location.href = "/";
@@ -833,6 +894,7 @@ function initSender() {
 }
 
 $("#accept-file").addEventListener("click", acceptFile);
+$("#confirm-receipt").addEventListener("click", confirmReceipt);
 
 const roomId = new URLSearchParams(window.location.search).get("room");
 const secrets = new URLSearchParams(window.location.hash.slice(1));
@@ -849,6 +911,7 @@ else if (roomId) {
 window.addEventListener("beforeunload", () => {
   stopPolling();
   stopRelayMonitoring();
+  stopExpiryCountdown();
   state.peer?.close();
   state.objectUrls.forEach(objectUrl => URL.revokeObjectURL(objectUrl));
   state.receiveCleanups.forEach(cleanup => cleanup?.());

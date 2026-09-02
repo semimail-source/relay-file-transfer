@@ -25,9 +25,9 @@ Relay 是一个开源的浏览器文件直传工具。Windows、macOS、iPhone�
 1. 发送方打开 [relay.xueai.pro](https://relay.xueai.pro)，选择文件并输入 4–6 位英文字母名字。
 2. 把生成的网址、二维码或“名字 + 6 位数字”取件码告诉接收方。
 3. 接收方打开链接，或进入 [`/pickup`](https://relay.xueai.pro/pickup) 输入取件码。
-4. 双方保持网页在线，接收方点击接收并保存文件。
+4. 接收方点击“我已收到”后开始 20 分钟倒计时；双方保持网页在线，接收方点击接收并保存文件。
 
-取件码领取一次后立即失效，房间最长保留 2 小时。发送方可选开启额外六位验证码确认。Relay 不会离线保存文件，因此它不是 OneDrive 或 WeTransfer 的替代品。
+取件码领取一次后立即失效。接收方确认前最长等待 24 小时，确认后接收窗口为 20 分钟。发送方可选开启额外六位验证码确认。Relay 不会离线保存文件，因此它不是 OneDrive 或 WeTransfer 的替代品。
 
 ## 安全设计
 
@@ -70,6 +70,8 @@ npm start
 | `TURN_ENABLED=1` | 服务端 TURN 总开关 | 启用 TURN 需要 |
 | `TURN_MONTHLY_LIMIT_GB` | 自动停止签发凭证的安全线，默认 `800` | 可选 |
 | `PUBLIC_ORIGIN` | 固定公开域名 | 可选 |
+| `ROOM_TTL_MS` | 接收方确认前的最长等待时间，默认 24 小时 | 可选 |
+| `CONFIRMED_ROOM_TTL_MS` | 接收方确认后的传输窗口，默认 20 分钟 | 可选 |
 
 部署后先保持 `TURN_ENABLED=0`。确认 Redis、Cloudflare 和管理员口令均已配置，再改为 `1`，并在 `/admin` 手动允许中继。
 

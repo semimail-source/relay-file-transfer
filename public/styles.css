@@ -525,6 +525,23 @@ h1 em {
 .status-copy strong { margin-top: 7px; font-size: 22px; line-height: 1.2; letter-spacing: -0.035em; }
 .status-copy small { margin-top: 10px; color: var(--muted); font-size: 11px; line-height: 1.6; }
 
+.expiry-badge {
+  position: relative;
+  z-index: 1;
+  width: fit-content;
+  margin-top: 17px;
+  padding: 9px 12px;
+  border: 1px solid rgba(47, 118, 80, 0.18);
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--green-deep);
+  background: rgba(143, 213, 167, 0.14);
+}
+.expiry-badge span { font-size: 9px; font-weight: 700; }
+.expiry-badge strong { font-variant-numeric: tabular-nums; font-size: 12px; letter-spacing: 0.05em; }
+
 .pairing-panel {
   position: relative;
   z-index: 1;
@@ -577,6 +594,11 @@ h1 em {
 
 .receiver-card h1 { font-size: clamp(37px, 8vw, 53px); }
 .receiver-message { margin: 22px auto 0; max-width: 380px; color: var(--muted); font-size: 13px; line-height: 1.7; }
+.receipt-confirmation { margin-top: 25px; }
+.receipt-confirmation button { width: 100%; padding: 15px 18px; border: 0; border-radius: 14px; color: white; background: var(--green-deep); cursor: pointer; font-size: 13px; font-weight: 800; box-shadow: 0 12px 24px rgba(47, 118, 80, 0.18); }
+.receipt-confirmation button:disabled { opacity: 0.55; cursor: wait; }
+.receipt-confirmation small { display: block; margin-top: 10px; color: var(--muted); font-size: 10px; }
+.receiver-expiry { margin: 18px auto 0; }
 .incoming-file { margin-top: 25px; text-align: left; }
 .receiver-progress-wrap { margin-top: 29px; text-align: left; }
 .receiver-progress-label { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }

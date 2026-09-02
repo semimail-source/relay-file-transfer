@@ -68,7 +68,7 @@
         <div class="share-intro">
           <p class="eyebrow">等待接收设备</p>
           <h1>把网址，<br><em>发给对方。</em></h1>
-          <p id="share-instruction" class="lede">对方输入取件码后会自动建立连接，无需再核对验证码。</p>
+          <p id="share-instruction" class="lede">对方确认收到后，20 分钟接收倒计时才会开始。</p>
           <button id="cancel-room" class="text-button" type="button">取消本次传输</button>
         </div>
 
@@ -88,8 +88,9 @@
             <div class="status-copy">
               <span id="sender-kicker">等待对方打开网址</span>
               <strong id="sender-status">保持这个页面打开</strong>
-              <small id="sender-detail">链接仅能由一台接收设备使用，有效期 2 小时</small>
+              <small id="sender-detail">未确认最长等待 24 小时；确认后仅保留 20 分钟</small>
             </div>
+            <div id="sender-expiry" class="expiry-badge hidden"><span>本次接收剩余</span><strong id="sender-expiry-time">20:00</strong></div>
             <div id="sender-pairing" class="pairing-panel hidden">
               <span>核对接收设备上的验证码</span>
               <strong id="sender-pair-code">000 000</strong>
@@ -108,6 +109,13 @@
           <p id="receiver-kicker" class="eyebrow">正在使用一次性链接</p>
           <h1 id="receiver-title">请稍候，<br><em>正在安全配对。</em></h1>
           <p id="receiver-message" class="receiver-message">此页面需要保持打开，直到你保存文件。</p>
+
+          <div id="receipt-confirmation" class="receipt-confirmation hidden">
+            <button id="confirm-receipt" type="button">我已收到，开始 20 分钟</button>
+            <small>在你确认以前，不会开始这 20 分钟倒计时</small>
+          </div>
+
+          <div id="receiver-expiry" class="expiry-badge receiver-expiry hidden"><span>本次接收剩余</span><strong id="receiver-expiry-time">20:00</strong></div>
 
           <div id="receiver-pairing" class="pairing-panel receiver-pairing hidden">
             <span>把这个验证码告诉发送方</span>
@@ -134,6 +142,6 @@
       </section>
     </main>
 
-    <footer><span>AES-GCM 加密 · SHA-256 完整性校验</span><span>房间 2 小时后自动失效</span></footer>
+    <footer><span>AES-GCM 加密 · SHA-256 完整性校验</span><span>未确认最长 24 小时 · 确认后 20 分钟</span></footer>
   </body>
 </html>
