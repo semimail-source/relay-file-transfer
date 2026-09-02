@@ -70,7 +70,12 @@ test("serves the encrypted sender page with security headers", async () => {
   assert.match(html, /id="task-panels"/);
   assert.match(html, /id="sender-wake-status"/);
   assert.match(html, /id="receiver-wake-status"/);
-  assert.match(html, /class="transfer-nav-link active"[^>]+data-i18n="nav.send"/);
+  assert.match(html, /id="home-gateway"/);
+  assert.match(html, /id="gateway-pickup-form"/);
+  assert.match(html, /id="gateway-pickup-input"/);
+  assert.match(html, /id="gateway-choose-media"/);
+  assert.match(html, /id="gateway-choose-files"/);
+  assert.match(html, /id="nav-send" class="transfer-nav-link"[^>]+data-i18n="nav.send"/);
   assert.match(html, /class="transfer-nav-link"[^>]+data-i18n="nav.pickup"/);
   assert.match(response.headers.get("content-security-policy"), /default-src 'self'/);
   assert.match(response.headers.get("content-security-policy"), /frame-ancestors 'self'/);

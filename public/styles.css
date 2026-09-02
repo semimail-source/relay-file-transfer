@@ -57,6 +57,7 @@
 
 * { box-sizing: border-box; }
 html { min-height: 100%; }
+.visually-hidden { width: 1px; height: 1px; position: absolute; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; clip-path: inset(50%); }
 
 body {
   margin: 0;
@@ -87,6 +88,7 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
 .brand-mark { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--line-strong); border-radius: 11px; color: var(--green); background: var(--surface); }
 .brand-mark svg { width: 20px; height: 20px; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .header-actions { display: flex; align-items: center; gap: 9px; }
+.landing .transfer-nav { display: none; }
 
 .language-toggle, .privacy-pill {
   min-height: 36px;
@@ -133,6 +135,65 @@ main {
 }
 
 .view { min-width: 0; max-width: 100%; grid-area: 1 / 1; }
+.gateway { width: min(760px, 100%); margin: 0 auto; padding: 64px 0 80px; }
+.gateway-intro { margin-bottom: 24px; }
+.gateway-intro h1 {
+  margin: 0;
+  font-size: clamp(26px, 3.4vw, 34px);
+  line-height: 1.15;
+  letter-spacing: -0.035em;
+  font-weight: 500;
+}
+.gateway-intro p { margin: 9px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.gateway-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.gateway-panel {
+  min-width: 0;
+  min-height: 190px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 30px;
+  padding: 22px 24px;
+  border: 1px solid var(--line-strong);
+  border-radius: 18px;
+  color: var(--ink);
+  background: var(--paper);
+}
+.gateway-panel:focus-within { border-color: var(--ink); }
+.gateway-panel-heading { display: flex; align-items: baseline; gap: 18px; }
+.gateway-panel-heading h2 { margin: 0; font-size: clamp(21px, 2.5vw, 26px); font-weight: 500; line-height: 1.1; letter-spacing: -0.035em; }
+.gateway-index {
+  color: var(--subtle);
+  font-family: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.04em;
+}
+.gateway-pickup-form { min-width: 0; }
+.gateway-code-row { display: grid; grid-template-columns: minmax(0, 1fr) 46px; gap: 7px; }
+.gateway-code-row input,
+.gateway-code-row button,
+.gateway-picker-actions button {
+  min-height: 46px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  color: var(--ink);
+  background: var(--paper);
+}
+.gateway-code-row input { min-width: 0; width: 100%; padding: 0 13px; font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 12px; text-transform: uppercase; }
+.gateway-code-row input::placeholder { color: var(--subtle); text-transform: none; }
+.gateway-code-row button { padding: 0; cursor: pointer; font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 16px; }
+.gateway-code-row button:hover,
+.gateway-picker-actions button:hover { border-color: var(--ink); background: var(--surface); }
+.gateway-code-row button:disabled { opacity: 0.45; cursor: wait; }
+.gateway-error { min-height: 1.35em; margin: 6px 2px 0; color: var(--danger); font-size: 10px; line-height: 1.35; }
+.gateway-picker-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.gateway-picker-actions button { min-width: 0; padding: 0 10px; cursor: pointer; font-size: 11px; font-weight: 400; }
+.gateway-file-input { width: 1px; height: 1px; position: absolute; overflow: hidden; opacity: 0; pointer-events: none; }
 .hero, .share-layout { display: grid; grid-template-columns: minmax(260px, 0.72fr) minmax(0, 1.28fr); gap: clamp(48px, 7vw, 88px); align-items: center; padding: 56px 0 72px; }
 .hero-copy, .share-intro { min-width: 0; }
 .eyebrow, .step-label { color: var(--green); font-size: 12px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; }
@@ -371,6 +432,18 @@ html:has(body.embedded-sender), body.embedded-sender { min-height: 0; background
   main { min-height: calc(100vh - 124px); }
   .pickup-main, .admin-main { width: min(100% - 28px, 780px); }
   h1 { font-size: 42px; }
+  .gateway { padding: 42px 0 56px; }
+  .gateway-intro { margin-bottom: 20px; }
+  .gateway-intro h1 { font-size: 25px; }
+  .gateway-intro p { font-size: 12px; }
+  .gateway-actions { gap: 9px; }
+  .gateway-panel { min-height: 178px; gap: 24px; padding: 16px; border-radius: 16px; }
+  .gateway-panel-heading { flex-direction: column; gap: 8px; }
+  .gateway-panel-heading h2 { font-size: clamp(18px, 5.4vw, 22px); }
+  .gateway-code-row { grid-template-columns: minmax(0, 1fr) 40px; gap: 6px; }
+  .gateway-code-row input, .gateway-code-row button, .gateway-picker-actions button { min-height: 44px; border-radius: 11px; }
+  .gateway-code-row input { padding: 0 10px; font-size: 10px; }
+  .gateway-picker-actions { grid-template-columns: 1fr; gap: 6px; }
   .hero, .share-layout { gap: 30px; padding: 34px 0 52px; }
   .feature-row { margin-top: 22px; }
   .transfer-card { padding: 16px; }

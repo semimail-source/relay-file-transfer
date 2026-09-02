@@ -6,8 +6,10 @@ const { Sha256, base64UrlEncode, base64UrlDecode } = window.RelayCrypto;
 const {
   formatCode: formatPickupCode,
   generateCode: generatePickupCode,
+  isValidCode: isValidPickupCode,
   isValidName: isValidPickupName,
   lookupHash: pickupLookupHash,
+  normalizeCode: normalizePickupCode,
   normalizeName: normalizePickupName
 } = window.RelayPickup;
 const CHUNK_SIZE = 64 * 1024;
@@ -174,11 +176,92 @@ function createSenderTask() {
   refreshAddTaskButton();
 }
 
-function initTaskHub() {
+function openSenderView() {
+  document.body.classList.remove("landing");
   showView("#sender-start");
+  $("#nav-send")?.classList.add("active");
+  $("#nav-send")?.setAttribute("aria-current", "page");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function sendGatewayFiles(fileList) {
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
+  openSenderView();
+  const task = taskHubState.tasks.get(taskHubState.activeId);
+  if (!task) return;
+  const deliver = () => task.iframe.contentWindow?.postMessage({
+    type: "relay:select-files",
+    taskId: task.id,
+    files
+  }, window.location.origin);
+  if (task.iframe.contentDocument?.readyState === "complete") deliver();
+  else task.iframe.addEventListener("load", deliver, { once: true });
+}
+
+async function claimFromGateway(event) {
+  event.preventDefault();
+  const input = $("#gateway-pickup-input");
+  const button = $("#gateway-pickup-submit");
+  const errorElement = $("#gateway-pickup-error");
+  const code = normalizePickupCode(input.value);
+  if (!isValidPickupCode(code)) {
+    errorElement.textContent = t("pickup.invalid", "请输入完整的英文名字和 6 位数字。");
+    input.focus();
+    return;
+  }
+
+  button.disabled = true;
+  errorElement.textContent = "";
+  try {
+    const pickupCodeHash = await pickupLookupHash(code);
+    const response = await fetch("/api/pickup/claim", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pickupCodeHash }),
+      cache: "no-store"
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || `HTTP_${response.status}`);
+    const fragment = new URLSearchParams({
+      receiver: result.receiverToken,
+      code: result.code,
+      verify: result.verificationRequired ? "1" : "0"
+    });
+    window.location.replace(`/?room=${encodeURIComponent(result.roomId)}&lang=${relayLanguage}#${fragment}`);
+  } catch (error) {
+    const messages = {
+      pickup_not_found: t("pickup.notFound", "取件码错误、已过期或尚未生成，请向发送方确认。"),
+      room_claimed: t("pickup.claimed", "这批文件已被另一台设备领取。"),
+      rate_limited: t("pickup.rateLimited", "尝试次数过多，请 10 分钟后再试。")
+    };
+    errorElement.textContent = messages[error.message] || t("pickup.failed", "暂时无法取件，请稍后重试。");
+    button.disabled = false;
+  }
+}
+
+function initTaskHub() {
   $("#sender-task-editor").classList.add("hidden");
   $("#task-hub").classList.remove("hidden");
   $("#add-sender-task").addEventListener("click", createSenderTask);
+  for (const trigger of document.querySelectorAll("[data-open-sender]")) {
+    trigger.addEventListener("click", event => {
+      event.preventDefault();
+      openSenderView();
+    });
+  }
+  const gatewayPickupInput = $("#gateway-pickup-input");
+  gatewayPickupInput.addEventListener("input", () => {
+    gatewayPickupInput.value = formatPickupCode(gatewayPickupInput.value);
+    $("#gateway-pickup-error").textContent = "";
+  });
+  $("#gateway-pickup-form").addEventListener("submit", claimFromGateway);
+  const gatewayMediaInput = $("#gateway-media-input");
+  const gatewayFileInput = $("#gateway-file-input");
+  $("#gateway-choose-media").addEventListener("click", () => gatewayMediaInput.click());
+  $("#gateway-choose-files").addEventListener("click", () => gatewayFileInput.click());
+  gatewayMediaInput.addEventListener("change", () => sendGatewayFiles(gatewayMediaInput.files));
+  gatewayFileInput.addEventListener("change", () => sendGatewayFiles(gatewayFileInput.files));
   window.addEventListener("message", event => {
     if (event.origin !== window.location.origin || !event.data || typeof event.data !== "object") return;
     const task = taskHubState.tasks.get(event.data.taskId);
@@ -202,6 +285,7 @@ function initTaskHub() {
     status.textContent = taskStatusText(event.data.phase, event.data);
   });
   createSenderTask();
+  showView("#home-gateway");
 }
 
 function showView(selector) {
@@ -1136,7 +1220,9 @@ function initSender() {
     window.addEventListener("load", reportHeight, { once: true });
     window.addEventListener("message", event => {
       if (event.origin !== window.location.origin || event.source !== window.parent) return;
-      if (event.data?.type === "relay:cancel-task" && event.data.taskId === embeddedTaskId) cancelRoom();
+      if (event.data?.taskId !== embeddedTaskId) return;
+      if (event.data.type === "relay:cancel-task") cancelRoom();
+      if (event.data.type === "relay:select-files") setSelectedFiles(event.data.files);
     });
   }
   showView("#sender-start");
