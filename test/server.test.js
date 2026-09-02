@@ -1,6 +1,7 @@
 const { test, before, after } = require("node:test");
 const assert = require("node:assert/strict");
 const { createHash } = require("node:crypto");
+const { readFile } = require("node:fs/promises");
 const {
   createApp,
   MemoryRoomStore,
@@ -66,10 +67,25 @@ test("serves the encrypted sender page with security headers", async () => {
   assert.match(html, /id="download-list"/);
   assert.match(html, /id="add-sender-task"/);
   assert.match(html, /id="task-panels"/);
+  assert.match(html, /id="sender-wake-status"/);
+  assert.match(html, /id="receiver-wake-status"/);
   assert.match(response.headers.get("content-security-policy"), /default-src 'self'/);
   assert.match(response.headers.get("content-security-policy"), /frame-ancestors 'self'/);
   assert.equal(response.headers.get("x-frame-options"), "SAMEORIGIN");
   assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+  assert.match(response.headers.get("permissions-policy"), /screen-wake-lock=\(self\)/);
+});
+
+test("keeps the screen awake only while file bytes are transferring", async () => {
+  const response = await fetch(`${origin}/app.js`);
+  assert.equal(response.status, 200);
+  const script = await response.text();
+  assert.match(script, /navigator\.wakeLock\.request\("screen"\)/);
+  assert.match(script, /clipboard-write; screen-wake-lock/);
+  assert.match(script, /async function releaseTransferWakeLock/);
+  assert.match(script, /document\.addEventListener\("visibilitychange"/);
+  const vercelConfig = await readFile(require.resolve("../vercel.json"), "utf8");
+  assert.match(vercelConfig, /screen-wake-lock=\(self\)/);
 });
 
 test("reports local signaling and TURN configuration", async () => {

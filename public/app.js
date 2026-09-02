@@ -55,7 +55,10 @@ const state = {
   pairingCode: null,
   receiptConfirmed: false,
   expiryTimer: null,
-  lastTaskProgress: -1
+  lastTaskProgress: -1,
+  wakeLockWanted: false,
+  wakeLockSentinel: null,
+  wakeLockRequest: null
 };
 
 const taskHubState = {
@@ -158,7 +161,7 @@ function createSenderTask() {
   iframe.className = "task-frame";
   iframe.title = t("task.frameTitle", `发送任务 ${number}`, { number });
   iframe.src = `/?embedded=1&senderTask=${encodeURIComponent(taskId)}&lang=${relayLanguage}`;
-  iframe.setAttribute("allow", "clipboard-write");
+  iframe.setAttribute("allow", "clipboard-write; screen-wake-lock");
   panel.append(iframe);
 
   const task = { id: taskId, number, tab, tabButton, panel, iframe, phase: "ready", closeTimer: null };
@@ -212,6 +215,68 @@ function formatBytes(bytes) {
   const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
   const value = bytes / (1024 ** index);
   return `${value >= 10 || index === 0 ? value.toFixed(0) : value.toFixed(1)} ${units[index]}`;
+}
+
+function wakeLockStatusElement() {
+  return state.role === "receiver" ? $("#receiver-wake-status") : $("#sender-wake-status");
+}
+
+function showWakeLockStatus(kind) {
+  const element = wakeLockStatusElement();
+  if (!element) return;
+  const messages = {
+    active: t("wake.active", "传输期间屏幕将保持常亮"),
+    unsupported: t("wake.unsupported", "此浏览器无法保持屏幕常亮，请勿锁屏或切到后台"),
+    denied: t("wake.denied", "无法保持屏幕常亮，请保持此页面在前台")
+  };
+  if (!kind) {
+    element.classList.add("hidden");
+    element.removeAttribute("data-kind");
+    element.textContent = "";
+    return;
+  }
+  element.textContent = messages[kind];
+  element.dataset.kind = kind;
+  element.classList.remove("hidden");
+}
+
+async function acquireTransferWakeLock() {
+  state.wakeLockWanted = true;
+  if (!("wakeLock" in navigator)) {
+    showWakeLockStatus("unsupported");
+    return;
+  }
+  if (document.visibilityState !== "visible" || state.wakeLockSentinel) return;
+  if (state.wakeLockRequest) return state.wakeLockRequest;
+
+  state.wakeLockRequest = (async () => {
+    try {
+      const sentinel = await navigator.wakeLock.request("screen");
+      if (!state.wakeLockWanted) {
+        await sentinel.release();
+        return;
+      }
+      state.wakeLockSentinel = sentinel;
+      sentinel.addEventListener("release", () => {
+        if (state.wakeLockSentinel === sentinel) state.wakeLockSentinel = null;
+        if (state.wakeLockWanted && document.visibilityState === "visible") showWakeLockStatus("denied");
+      }, { once: true });
+      showWakeLockStatus("active");
+    } catch (_) {
+      if (state.wakeLockWanted) showWakeLockStatus("denied");
+    } finally {
+      state.wakeLockRequest = null;
+    }
+  })();
+  return state.wakeLockRequest;
+}
+
+async function releaseTransferWakeLock() {
+  state.wakeLockWanted = false;
+  const sentinel = state.wakeLockSentinel;
+  state.wakeLockSentinel = null;
+  showWakeLockStatus(null);
+  if (sentinel) await sentinel.release().catch(() => {});
 }
 
 function formatCode(code) {
@@ -483,6 +548,7 @@ function wireSenderChannel(channel) {
         const index = message.payload?.index;
         if (Number.isInteger(index) && message.payload?.sha256 === state.sentHashes.get(index)) state.receivedAcks.add(index);
         if (state.receivedAcks.size === state.files.length) {
+          releaseTransferWakeLock();
           $("#sender-orb").classList.add("complete");
           $("#sender-kicker").textContent = t("sender.receivedKicker", "对方已完整接收");
           $("#sender-status").textContent = t("sender.filesVerified", `${state.files.length} 个文件均已校验`, { count: state.files.length });
@@ -516,6 +582,7 @@ async function waitForBuffer(channel) {
 
 async function sendFiles() {
   state.sending = true;
+  await acquireTransferWakeLock();
   const batchSize = totalSize(state.files);
   let batchOffset = 0;
   $("#sender-kicker").textContent = t("sender.transferring", "正在加密传输");
@@ -769,6 +836,7 @@ async function acceptFile() {
   button.disabled = true;
   $("#receiver-error").textContent = "";
   try {
+    await acquireTransferWakeLock();
     button.classList.add("hidden");
     $("#receiver-progress-wrap").classList.remove("hidden");
     $("#receiver-kicker").textContent = t("receiver.receivingKicker", "正在加密接收");
@@ -777,6 +845,7 @@ async function acceptFile() {
     state.accepted = true;
     await sendSecure("accept", null);
   } catch (_) {
+    releaseTransferWakeLock();
     state.accepted = false;
     button.disabled = false;
     button.classList.remove("hidden");
@@ -842,6 +911,7 @@ async function finishIncomingFile(expected) {
   state.sink = null;
   state.metadata = null;
   if (state.currentFileIndex === state.manifest.files.length - 1) {
+    releaseTransferWakeLock();
     $("#receiver-progress-label").textContent = t("receiver.allVerified", "全部接收并校验完成");
     $("#receiver-percent").textContent = "100%";
     $("#receiver-kicker").textContent = t("receiver.intact", "所有文件完好无损");
@@ -983,6 +1053,7 @@ async function handleReceiverSignal(message) {
 
 function showConnectionError(error) {
   stopRelayMonitoring();
+  releaseTransferWakeLock();
   const message = error?.message || t("error.connection", "连接出现问题。");
   if (!$("#receiver-view").classList.contains("hidden")) {
     $("#receiver-error").textContent = message;
@@ -1039,6 +1110,7 @@ async function cancelRoom() {
   stopPolling();
   stopRelayMonitoring();
   stopExpiryCountdown();
+  await releaseTransferWakeLock();
   state.peer?.close();
   await deleteRoom().catch(() => {});
   if (isEmbeddedSender) {
@@ -1109,7 +1181,15 @@ window.addEventListener("beforeunload", () => {
   stopPolling();
   stopRelayMonitoring();
   stopExpiryCountdown();
+  state.wakeLockWanted = false;
+  state.wakeLockSentinel?.release().catch(() => {});
   state.peer?.close();
   state.objectUrls.forEach(objectUrl => URL.revokeObjectURL(objectUrl));
   state.receiveCleanups.forEach(cleanup => cleanup?.());
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && state.wakeLockWanted && !state.wakeLockSentinel) {
+    acquireTransferWakeLock();
+  }
 });
