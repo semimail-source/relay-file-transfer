@@ -61,6 +61,7 @@ test("serves the encrypted sender page with security headers", async () => {
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /端到端加密/);
+  assert.match(html, /id="media-input" type="file" accept="image\/\*,video\/\*" multiple/);
   assert.match(html, /id="file-input" type="file" multiple/);
   assert.match(html, /id="pickup-name"[^>]+maxlength="6"/);
   assert.match(html, /id="verification-required" type="checkbox"/);

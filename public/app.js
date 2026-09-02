@@ -1141,15 +1141,24 @@ function initSender() {
   }
   showView("#sender-start");
   const input = $("#file-input");
+  const mediaInput = $("#media-input");
   const pickupName = $("#pickup-name");
   const drop = $("#drop-zone");
   input.addEventListener("change", () => setSelectedFiles(input.files));
+  mediaInput.addEventListener("change", () => setSelectedFiles(mediaInput.files));
+  $("#choose-media").addEventListener("click", () => mediaInput.click());
+  $("#choose-files").addEventListener("click", () => input.click());
   pickupName.addEventListener("input", () => {
     pickupName.value = normalizePickupName(pickupName.value);
     $("#start-error").textContent = "";
     refreshCreateButton();
   });
-  $("#remove-file").addEventListener("click", event => { event.preventDefault(); input.value = ""; setSelectedFiles([]); });
+  $("#remove-file").addEventListener("click", event => {
+    event.preventDefault();
+    input.value = "";
+    mediaInput.value = "";
+    setSelectedFiles([]);
+  });
   for (const eventName of ["dragenter", "dragover"]) drop.addEventListener(eventName, event => { event.preventDefault(); drop.classList.add("dragging"); });
   for (const eventName of ["dragleave", "drop"]) drop.addEventListener(eventName, event => { event.preventDefault(); drop.classList.remove("dragging"); });
   drop.addEventListener("drop", event => { if (event.dataTransfer.files.length) setSelectedFiles(event.dataTransfer.files); });

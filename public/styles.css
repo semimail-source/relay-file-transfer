@@ -37,7 +37,7 @@ body::before {
 
 button, input { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
-button:focus-visible, a:focus-visible, .drop-zone:focus-within { outline: 3px solid rgba(47, 118, 80, 0.35); outline-offset: 3px; }
+button:focus-visible, a:focus-visible, .picker-button:focus-visible { outline: 3px solid rgba(47, 118, 80, 0.35); outline-offset: 3px; }
 
 .ambient {
   position: fixed;
@@ -344,7 +344,7 @@ h1 em {
   background-color: rgba(143, 213, 167, 0.09);
 }
 
-.drop-zone input { position: absolute; opacity: 0; pointer-events: none; }
+.drop-zone input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
 
 .file-orbit {
   width: 108px;
@@ -394,7 +394,34 @@ h1 em {
 }
 
 .drop-zone strong { font-size: 16px; letter-spacing: -0.02em; }
-.drop-zone > span:last-child { margin-top: 9px; color: #89938e; font-size: 12px; }
+.drop-zone > span:last-child { margin-top: 11px; color: #89938e; font-size: 12px; }
+
+.file-picker-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 9px;
+  margin-top: 17px;
+}
+
+.picker-button {
+  min-height: 42px;
+  padding: 10px 17px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(47, 118, 80, 0.25);
+  border-radius: 999px;
+  color: var(--green-deep);
+  background: rgba(255, 255, 255, 0.72);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: 160ms ease;
+}
+
+.picker-button:hover { transform: translateY(-1px); border-color: var(--green-deep); }
+.picker-button-primary { color: white; background: var(--green-deep); }
 
 .selected-file, .incoming-file {
   min-width: 0;
