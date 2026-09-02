@@ -1,8 +1,11 @@
 (function () {
   const translations = {
     en: {
-      "meta.homeTitle": "Relay — Direct browser file transfer",
+      "meta.homeTitle": "Relay — Free, install-free browser file transfer",
+      "meta.homeDescription": "Relay is a free, install-free browser file transfer tool for Windows, Mac, iPhone, and Android. End-to-end encrypted, with files never stored on Relay.",
+      "meta.homeSocialDescription": "Free, install-free and end-to-end encrypted. Files are never stored on Relay.",
       "meta.pickupTitle": "Enter a pickup code — Relay",
+      "meta.pickupDescription": "Enter a one-time Relay pickup code to receive files directly from the sender's browser.",
       "common.homeAria": "Relay home",
       "common.security": "Free · End-to-end encrypted · Files are never stored",
       "common.footerSecurity": "AES-GCM encryption · SHA-256 integrity check",
@@ -11,7 +14,7 @@
       "nav.transferAria": "Choose send or receive",
       "nav.send": "Send files",
       "nav.pickup": "Receive files",
-      "home.gatewayTitle": "Choose an action",
+      "home.gatewayTitle": "Direct browser file transfer",
       "home.gatewayLede": "Free · No installation · Files are never stored",
       "home.gatewayAria": "Choose to receive or send files",
       "home.receive": "Receive files",
@@ -242,10 +245,17 @@
     document.documentElement.lang = lang === "zh" ? "zh-CN" : "en";
     for (const element of document.querySelectorAll("[data-i18n]")) element.textContent = t(element.dataset.i18n, { zh: element.textContent });
     for (const element of document.querySelectorAll("[data-i18n-html]")) element.innerHTML = t(element.dataset.i18nHtml, { zh: element.innerHTML });
+    for (const element of document.querySelectorAll("[data-i18n-content]")) element.content = t(element.dataset.i18nContent, { zh: element.content });
     for (const element of document.querySelectorAll("[data-i18n-placeholder]")) element.placeholder = t(element.dataset.i18nPlaceholder, { zh: element.placeholder });
     for (const element of document.querySelectorAll("[data-i18n-aria]")) element.setAttribute("aria-label", t(element.dataset.i18nAria, { zh: element.getAttribute("aria-label") || "" }));
     for (const element of document.querySelectorAll("[data-i18n-alt]")) element.alt = t(element.dataset.i18nAlt, { zh: element.alt || "" });
     for (const element of document.querySelectorAll("a[data-language-link]")) element.href = withLang(element.getAttribute("href"));
+    const canonical = document.querySelector('link[rel="canonical"]');
+    const openGraphUrl = document.querySelector('meta[property="og:url"]');
+    const openGraphLocale = document.querySelector('meta[property="og:locale"]');
+    if (canonical && location.pathname === "/") canonical.href = `https://relay.xueai.pro/?lang=${lang}`;
+    if (openGraphUrl) openGraphUrl.content = `https://relay.xueai.pro/?lang=${lang}`;
+    if (openGraphLocale) openGraphLocale.content = lang === "zh" ? "zh_CN" : "en_US";
     const toggle = document.querySelector("#language-toggle");
     if (toggle) {
       toggle.textContent = lang === "zh" ? "English" : "中文";

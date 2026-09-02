@@ -21,7 +21,10 @@ const MIME_TYPES = {
   ".js": "text/javascript; charset=utf-8",
   ".woff2": "font/woff2",
   ".svg": "image/svg+xml",
-  ".png": "image/png"
+  ".png": "image/png",
+  ".xml": "application/xml; charset=utf-8",
+  ".txt": "text/plain; charset=utf-8",
+  ".webmanifest": "application/manifest+json"
 };
 
 function firstLanAddress() {

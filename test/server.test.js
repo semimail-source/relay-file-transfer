@@ -77,6 +77,11 @@ test("serves the encrypted sender page with security headers", async () => {
   assert.match(html, /id="gateway-choose-files"/);
   assert.match(html, /id="nav-send" class="transfer-nav-link"[^>]+data-i18n="nav.send"/);
   assert.match(html, /class="transfer-nav-link"[^>]+data-i18n="nav.pickup"/);
+  assert.match(html, /<meta name="description"[^>]+浏览器文件直传工具/);
+  assert.match(html, /<link rel="canonical" href="https:\/\/relay\.xueai\.pro\/\?lang=zh">/);
+  assert.match(html, /hreflang="en" href="https:\/\/relay\.xueai\.pro\/\?lang=en"/);
+  assert.match(html, /type="application\/ld\+json"/);
+  assert.match(html, /<h1 data-i18n="home\.gatewayTitle">浏览器文件直传<\/h1>/);
   assert.match(response.headers.get("content-security-policy"), /default-src 'self'/);
   assert.match(response.headers.get("content-security-policy"), /frame-ancestors 'self'/);
   assert.equal(response.headers.get("x-frame-options"), "SAMEORIGIN");
@@ -86,6 +91,32 @@ test("serves the encrypted sender page with security headers", async () => {
   const fontResponse = await fetch(`${origin}/fonts/nebula-sans/NebulaSans-Book.woff2`);
   assert.equal(fontResponse.status, 200);
   assert.equal(fontResponse.headers.get("content-type"), "font/woff2");
+});
+
+test("publishes crawl rules, localized sitemap entries, and a favicon", async () => {
+  const robotsResponse = await fetch(`${origin}/robots.txt`);
+  assert.equal(robotsResponse.status, 200);
+  assert.match(robotsResponse.headers.get("content-type"), /^text\/plain/);
+  const robots = await robotsResponse.text();
+  assert.match(robots, /Disallow: \/admin/);
+  assert.match(robots, /Disallow: \/api/);
+  assert.match(robots, /Sitemap: https:\/\/relay\.xueai\.pro\/sitemap\.xml/);
+
+  const sitemapResponse = await fetch(`${origin}/sitemap.xml`);
+  assert.equal(sitemapResponse.status, 200);
+  assert.match(sitemapResponse.headers.get("content-type"), /^application\/xml/);
+  const sitemap = await sitemapResponse.text();
+  assert.match(sitemap, /https:\/\/relay\.xueai\.pro\/\?lang=zh/);
+  assert.match(sitemap, /https:\/\/relay\.xueai\.pro\/\?lang=en/);
+  assert.match(sitemap, /hreflang="x-default"/);
+
+  const faviconResponse = await fetch(`${origin}/favicon.svg`);
+  assert.equal(faviconResponse.status, 200);
+  assert.equal(faviconResponse.headers.get("content-type"), "image/svg+xml");
+
+  const pickupResponse = await fetch(`${origin}/pickup`);
+  assert.equal(pickupResponse.status, 200);
+  assert.match(await pickupResponse.text(), /<meta name="robots" content="noindex,follow">/);
 });
 
 test("keeps the screen awake only while file bytes are transferring", async () => {

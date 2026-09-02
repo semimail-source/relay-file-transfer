@@ -4,9 +4,47 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#ffffff">
-    <title data-i18n="meta.homeTitle">Relay — 浏览器里的文件直传</title>
+    <meta name="application-name" content="Relay">
+    <meta name="description" content="Relay 是免费的浏览器文件直传工具，无需安装，可在 Windows、Mac、iPhone 和 Android 间发送大文件。端到端加密，文件不会储存在 Relay 服务器。" data-i18n-content="meta.homeDescription">
+    <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
+    <link rel="canonical" href="https://relay.xueai.pro/?lang=zh">
+    <link rel="alternate" hreflang="zh-CN" href="https://relay.xueai.pro/?lang=zh">
+    <link rel="alternate" hreflang="en" href="https://relay.xueai.pro/?lang=en">
+    <link rel="alternate" hreflang="x-default" href="https://relay.xueai.pro/">
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Relay">
+    <meta property="og:title" content="Relay — 免费、无需安装的浏览器文件直传" data-i18n-content="meta.homeTitle">
+    <meta property="og:description" content="免费、无需安装、端到端加密；文件不会储存在 Relay 服务器。" data-i18n-content="meta.homeSocialDescription">
+    <meta property="og:url" content="https://relay.xueai.pro/?lang=zh">
+    <meta property="og:locale" content="zh_CN">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Relay — 免费、无需安装的浏览器文件直传" data-i18n-content="meta.homeTitle">
+    <meta name="twitter:description" content="免费、无需安装、端到端加密；文件不会储存在 Relay 服务器。" data-i18n-content="meta.homeSocialDescription">
+    <title data-i18n="meta.homeTitle">Relay — 免费、无需安装的浏览器文件直传</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Relay",
+        "url": "https://relay.xueai.pro/",
+        "applicationCategory": "UtilitiesApplication",
+        "operatingSystem": "Windows, macOS, iOS, Android, Linux",
+        "browserRequirements": "Requires a modern browser with WebRTC support",
+        "description": "Free, install-free, end-to-end encrypted browser file transfer. Files are never stored on Relay.",
+        "inLanguage": ["zh-CN", "en"],
+        "isAccessibleForFree": true,
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        },
+        "license": "https://github.com/semimail-source/relay-file-transfer/blob/main/LICENSE",
+        "sameAs": ["https://github.com/semimail-source/relay-file-transfer"]
+      }
+    </script>
     <link rel="stylesheet" href="/styles.css?v=13">
-    <script src="/i18n.js?v=11" defer></script>
+    <script src="/i18n.js?v=12" defer></script>
     <script src="/qrcode.bundle.js" defer></script>
     <script src="/crypto.js" defer></script>
     <script src="/pickup-crypto.js" defer></script>
@@ -34,7 +72,7 @@
     <main>
       <section id="home-gateway" class="gateway view">
         <div class="gateway-intro">
-          <h1 data-i18n="home.gatewayTitle">选择操作</h1>
+          <h1 data-i18n="home.gatewayTitle">浏览器文件直传</h1>
           <p data-i18n="home.gatewayLede">免费 · 无需安装 · 不储存文件</p>
         </div>
 
