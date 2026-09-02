@@ -149,15 +149,16 @@ main {
 .gateway-intro p { margin: 9px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
 .gateway-actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1fr);
+  gap: 8px;
+  align-items: stretch;
 }
 .gateway-panel {
   min-width: 0;
   min-height: 190px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
+  display: grid;
+  grid-template-rows: auto 66px;
+  align-content: space-between;
   gap: 30px;
   padding: 22px 24px;
   border: 1px solid var(--line-strong);
@@ -166,16 +167,18 @@ main {
   background: var(--paper);
 }
 .gateway-panel:focus-within { border-color: var(--ink); }
-.gateway-panel-heading { display: flex; align-items: baseline; gap: 18px; }
+.gateway-panel-heading { min-width: 0; }
 .gateway-panel-heading h2 { margin: 0; font-size: clamp(21px, 2.5vw, 26px); font-weight: 400; line-height: 1.1; letter-spacing: -0.035em; }
-.gateway-index {
+.gateway-or {
+  align-self: center;
+  justify-self: center;
   color: var(--subtle);
   font-family: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: 11px;
   font-weight: 400;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
 }
-.gateway-pickup-form { min-width: 0; }
+.gateway-pickup-form { min-width: 0; align-self: start; }
 .gateway-code-row { display: grid; grid-template-columns: minmax(0, 1fr) 46px; gap: 7px; }
 .gateway-code-row input,
 .gateway-code-row button,
@@ -193,7 +196,7 @@ main {
 .gateway-picker-actions button:hover { border-color: var(--ink); background: var(--surface); }
 .gateway-code-row button:disabled { opacity: 0.45; cursor: wait; }
 .gateway-error { min-height: 1.35em; margin: 6px 2px 0; color: var(--danger); font-size: 10px; line-height: 1.35; }
-.gateway-picker-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
+.gateway-picker-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; align-self: start; }
 .gateway-picker-actions button { min-width: 0; padding: 0 10px; cursor: pointer; font-size: 11px; font-weight: 400; }
 .gateway-file-input { width: 1px; height: 1px; position: absolute; overflow: hidden; opacity: 0; pointer-events: none; }
 .hero, .share-layout { display: grid; grid-template-columns: minmax(260px, 0.72fr) minmax(0, 1.28fr); gap: clamp(44px, 6vw, 72px); align-items: center; padding: 48px 0 64px; }
@@ -440,9 +443,9 @@ html:has(body.embedded-sender), body.embedded-sender { min-height: 0; background
   .gateway-intro { margin-bottom: 20px; }
   .gateway-intro h1 { font-size: 25px; }
   .gateway-intro p { font-size: 12px; }
-  .gateway-actions { gap: 9px; }
-  .gateway-panel { min-height: 178px; gap: 24px; padding: 16px; border-radius: 16px; }
-  .gateway-panel-heading { flex-direction: column; gap: 8px; }
+  .gateway-actions { grid-template-columns: minmax(0, 1fr) 18px minmax(0, 1fr); gap: 6px; }
+  .gateway-panel { min-height: 178px; grid-template-rows: auto 94px; gap: 24px; padding: 16px; border-radius: 16px; }
+  .gateway-or { font-size: 10px; }
   .gateway-panel-heading h2 { font-size: clamp(18px, 5.4vw, 22px); }
   .gateway-code-row { grid-template-columns: minmax(0, 1fr) 40px; gap: 6px; }
   .gateway-code-row input, .gateway-code-row button, .gateway-picker-actions button { min-height: 44px; border-radius: 11px; }

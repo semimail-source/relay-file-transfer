@@ -1,6 +1,6 @@
 # Relay
 
-**Cross-device AirDrop without an install or a file upload.**
+**Free cross-device AirDrop without an install or stored files.**
 
 [简体中文](README.md) · [Live demo](https://relay.xueai.pro) · [Security](SECURITY.md)
 
@@ -8,7 +8,7 @@
 
 ![Relay browser file transfer demo](docs/relay-demo-v2.gif)
 
-Relay is an open-source, browser-only file transfer tool for Windows, macOS,
+Relay is a free, open-source, browser-only file transfer tool for Windows, macOS,
 iPhone, iPad, and Android. Select one or more files and share a one-time link,
 QR code, or short pickup code. The files move in real time over WebRTC and are
 never stored by Relay.

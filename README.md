@@ -1,6 +1,6 @@
 # Relay
 
-**无需安装、文件不上传服务器的跨设备 AirDrop。**
+**免费、无需安装、不储存文件的跨设备 AirDrop。**
 
 [English](README.en.md) · [在线体验](https://relay.xueai.pro) · [安全说明](SECURITY.md)
 
@@ -8,7 +8,7 @@
 
 ![Relay 浏览器文件直传演示](docs/relay-demo-v2.gif)
 
-Relay 是一个开源的浏览器文件直传工具。Windows、macOS、iPhone、iPad 和 Android 无需安装客户端：选择一个或多个文件，把网址、二维码或简短取件码告诉对方，即可实时传输。
+Relay 是一个免费、开源的浏览器文件直传工具。Windows、macOS、iPhone、iPad 和 Android 无需安装客户端：选择一个或多个文件，把网址、二维码或简短取件码告诉对方，即可实时传输，文件不会被 Relay 储存。
 
 ## 为什么用 Relay
 
