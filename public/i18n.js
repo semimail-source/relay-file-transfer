@@ -11,6 +11,7 @@
       "common.footerSecurity": "AES-GCM encryption · SHA-256 integrity check",
       "common.footerTiming": "Wait up to 24 hours · 20 minutes after confirmation",
       "common.languageAria": "Switch language",
+      "common.githubStarAria": "Star Relay on GitHub",
       "nav.transferAria": "Choose send or receive",
       "nav.send": "Send files",
       "nav.pickup": "Receive files",

@@ -92,7 +92,7 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
 .header-actions { display: flex; align-items: center; gap: 9px; }
 .landing .transfer-nav { display: none; }
 
-.language-toggle, .privacy-pill {
+.language-toggle, .github-star-link, .privacy-pill {
   min-height: 36px;
   display: inline-flex;
   align-items: center;
@@ -103,6 +103,16 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
   font-size: 12px;
   font-weight: 400;
 }
+
+.github-star-link {
+  gap: 7px;
+  padding: 0 12px;
+  color: var(--ink);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.github-star-link svg { width: 15px; height: 15px; stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; }
+.github-star-link:hover { border-color: var(--line-strong); background: var(--surface); }
 
 .transfer-nav { display: inline-flex; align-items: center; gap: 5px; }
 .transfer-nav-link {
@@ -435,7 +445,9 @@ html:has(body.embedded-sender), body.embedded-sender { min-height: 0; background
   .header-actions { gap: 6px; }
   .transfer-nav { gap: 4px; }
   .transfer-nav-link { min-height: 34px; padding: 0 10px; font-size: 10px; }
-  .language-toggle { min-height: 34px; padding: 0 10px; font-size: 10px; }
+  .language-toggle, .github-star-link { min-height: 34px; padding: 0 10px; font-size: 10px; }
+  .github-star-label { font-size: 0; }
+  .github-star-label::after { content: "Star"; font-size: 10px; }
   main { min-height: calc(100vh - 124px); }
   .pickup-main, .admin-main { width: min(100% - 28px, 780px); }
   h1 { font-size: 36px; }

@@ -75,6 +75,7 @@ test("serves the encrypted sender page with security headers", async () => {
   assert.match(html, /id="gateway-pickup-input"/);
   assert.match(html, /id="gateway-choose-media"/);
   assert.match(html, /id="gateway-choose-files"/);
+  assert.match(html, /class="github-star-link"[^>]+href="https:\/\/github\.com\/semimail-source\/relay-file-transfer"/);
   assert.match(html, /id="nav-send" class="transfer-nav-link"[^>]+data-i18n="nav.send"/);
   assert.match(html, /class="transfer-nav-link"[^>]+data-i18n="nav.pickup"/);
   assert.match(html, /<meta name="description"[^>]+浏览器文件直传工具/);
