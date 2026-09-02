@@ -3,14 +3,14 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#f4f1e8">
+    <meta name="theme-color" content="#ffffff">
     <title data-i18n="meta.homeTitle">Relay — 浏览器里的文件直传</title>
-    <link rel="stylesheet" href="/styles.css?v=5">
-    <script src="/i18n.js?v=5" defer></script>
+    <link rel="stylesheet" href="/styles.css?v=6">
+    <script src="/i18n.js?v=6" defer></script>
     <script src="/qrcode.bundle.js" defer></script>
     <script src="/crypto.js" defer></script>
     <script src="/pickup-crypto.js" defer></script>
-    <script src="/app.js?v=5" defer></script>
+    <script src="/app.js?v=6" defer></script>
   </head>
   <body>
     <div class="ambient ambient-one"></div>
@@ -18,7 +18,7 @@
 
     <header class="site-header">
       <a class="brand" href="/" aria-label="Relay 首页" data-i18n-aria="common.homeAria" data-language-link>
-        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M6 7h11m0 0-3-3m3 3-3 3M18 17H7m0 0 3 3m-3-3 3-3"/></svg></span>
         <span>Relay</span>
       </a>
       <div class="header-actions">
@@ -31,9 +31,9 @@
     <main>
       <section id="sender-start" class="hero view">
         <div class="hero-copy">
-          <p class="eyebrow" data-i18n="home.eyebrow">浏览器里的文件直传</p>
-          <h1 data-i18n-html="home.title">把大文件，<br><em>轻轻递过去。</em></h1>
-          <p class="lede" data-i18n="home.lede">任意设备选择文件，另一台设备只需打开网址。文件直接在两台浏览器之间传输，不经过邮件，也不占用网盘。</p>
+          <p class="eyebrow" data-i18n="home.eyebrow">点对点文件传输</p>
+          <h1 data-i18n-html="home.title">从这台设备，<br><em>直接发到另一台。</em></h1>
+          <p class="lede" data-i18n="home.lede">选择文件，把链接、二维码或取件码告诉对方。文件直接在两台浏览器之间传输，不经过邮件，也不占用网盘。</p>
           <div class="feature-row" aria-label="产品特点" data-i18n-aria="home.featuresAria">
             <span data-i18n="home.featureInstall">无需安装</span><i></i><span data-i18n="home.featureDevices">跨设备直传</span><i></i><span data-i18n="home.featureOnce">一次性链接</span>
           </div>
@@ -53,11 +53,11 @@
         </section>
 
         <div id="sender-task-editor" class="transfer-card">
-          <div class="card-topline"><span class="step-label" data-i18n="sender.stepSelect">01 / 选择文件</span><span class="device-label" data-i18n="sender.devices">任意设备 → 任意设备</span></div>
+          <div class="card-topline"><span class="step-label" data-i18n="sender.stepSelect">选择要发送的文件</span><span class="device-label" data-i18n="sender.devices">任意设备 → 任意设备</span></div>
           <div id="drop-zone" class="drop-zone">
             <input id="media-input" type="file" accept="image/*,video/*" multiple>
             <input id="file-input" type="file" multiple>
-            <span class="file-orbit" aria-hidden="true"><span class="file-icon"><span></span></span></span>
+            <span class="file-orbit" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M7 3.75h7l3 3V20.25H7z"/><path d="M14 3.75v3h3M12 10v6m-3-3h6"/></svg></span>
             <strong id="drop-title" data-i18n="sender.drop">拖入文件，或从下方选择</strong>
             <span class="file-picker-actions">
               <button id="choose-media" class="picker-button picker-button-primary" type="button" data-i18n="sender.chooseMedia">照片或视频</button>
@@ -66,7 +66,7 @@
             <span id="drop-hint" data-i18n="sender.dropHint">文件不会上传到 Relay 服务器</span>
           </div>
           <div id="selected-file" class="selected-file hidden">
-            <span class="selected-icon" aria-hidden="true">↗</span>
+            <span class="selected-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M7 3.75h7l3 3V20.25H7z"/><path d="M14 3.75v3h3"/></svg></span>
             <span class="selected-copy"><strong id="selected-name"></strong><small id="selected-size"></small><small id="selected-list" class="file-names"></small></span>
             <button id="remove-file" type="button" class="icon-button" aria-label="移除全部文件" data-i18n-aria="sender.removeAria">×</button>
           </div>
@@ -86,15 +86,15 @@
 
       <section id="sender-share" class="share-layout view hidden">
         <div class="share-intro">
-          <p class="eyebrow" data-i18n="share.eyebrow">等待接收设备</p>
-          <h1 data-i18n-html="share.title">把网址，<br><em>发给对方。</em></h1>
+          <p class="eyebrow" data-i18n="share.eyebrow">发送任务已创建</p>
+          <h1 data-i18n-html="share.title">分享链接，<br><em>二维码或取件码。</em></h1>
           <p id="share-instruction" class="lede" data-i18n="share.instruction">对方确认收到后，20 分钟接收倒计时才会开始。</p>
           <button id="cancel-room" class="text-button" type="button" data-i18n="share.cancel">取消本次传输</button>
         </div>
 
         <div class="share-stack">
           <article class="qr-card">
-            <div class="card-topline"><span class="step-label" data-i18n="share.stepOpen">02 / 打开网址</span><span id="room-code" class="room-code" data-i18n="share.once">一次有效</span></div>
+            <div class="card-topline"><span class="step-label" data-i18n="share.stepOpen">扫码可直接打开</span><span id="room-code" class="room-code" data-i18n="share.once">一次有效</span></div>
             <div class="qr-shell"><img id="qr-image" alt="一次性接收链接二维码" data-i18n-alt="share.qrAlt"></div>
             <div class="link-row"><span id="receiver-link"></span><button id="copy-link" class="copy-button" type="button" data-i18n="share.copyLink">复制链接</button></div>
             <div class="pickup-share">
@@ -125,10 +125,10 @@
 
       <section id="receiver-view" class="receiver-layout view hidden">
         <div class="receiver-card">
-          <div class="receiver-brand"><span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span><span data-i18n="receiver.from">来自 Relay</span></div>
+          <div class="receiver-brand"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M6 7h11m0 0-3-3m3 3-3 3M18 17H7m0 0 3 3m-3-3 3-3"/></svg></span><span data-i18n="receiver.from">来自 Relay</span></div>
           <div id="receiver-animation" class="receive-animation"><span></span><span></span><span></span><i>↓</i></div>
           <p id="receiver-kicker" class="eyebrow" data-i18n="receiver.linkKicker">正在使用一次性链接</p>
-          <h1 id="receiver-title" data-i18n-html="receiver.initialTitle">请稍候，<br><em>正在安全配对。</em></h1>
+          <h1 id="receiver-title" data-i18n-html="receiver.initialTitle">正在建立<br><em>安全连接</em></h1>
           <p id="receiver-message" class="receiver-message" data-i18n="receiver.initialMessage">此页面需要保持打开，直到你保存文件。</p>
           <p id="receiver-wake-status" class="wake-status receiver-wake-status hidden" role="status"></p>
 
@@ -146,7 +146,7 @@
           </div>
 
           <div id="incoming-file" class="incoming-file hidden">
-            <span class="incoming-icon" aria-hidden="true">↘</span>
+            <span class="incoming-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M7 3.75h7l3 3V20.25H7z"/><path d="M14 3.75v3h3"/></svg></span>
             <span><strong id="incoming-name"></strong><small id="incoming-size"></small><small id="incoming-list" class="file-names"></small></span>
           </div>
           <p id="incoming-warning" class="warning-message hidden"></p>

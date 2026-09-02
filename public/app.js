@@ -817,7 +817,7 @@ function showIncomingFiles(manifest) {
   if (!Number.isSafeInteger(calculatedSize) || calculatedSize !== manifest.totalSize) throw new Error(t("error.manifestSize", "文件清单大小不一致。"));
   state.manifest = { files, totalSize: calculatedSize };
   $("#receiver-kicker").textContent = t("receiver.incomingKicker", `发送方想给你 ${files.length} 个文件`, { count: files.length });
-  $("#receiver-title").innerHTML = t("receiver.incomingTitle", "收到一些文件，<br><em>要接住它们吗？</em>");
+  $("#receiver-title").innerHTML = t("receiver.incomingTitle", "检查待接收文件");
   $("#receiver-message").textContent = t("receiver.review", "确认名称、数量和总大小后再接收。Relay 不会自动打开文件。");
   $("#incoming-name").textContent = files.length === 1 ? files[0].name : t("receiver.fileCount", `${files.length} 个文件`, { count: files.length });
   $("#incoming-size").textContent = t("files.total", `${formatBytes(calculatedSize)} · 总大小`, { size: formatBytes(calculatedSize) });
@@ -840,7 +840,7 @@ async function acceptFile() {
     button.classList.add("hidden");
     $("#receiver-progress-wrap").classList.remove("hidden");
     $("#receiver-kicker").textContent = t("receiver.receivingKicker", "正在加密接收");
-    $("#receiver-title").innerHTML = t("receiver.receivingTitle", "文件正在，<br><em>穿过网络。</em>");
+    $("#receiver-title").innerHTML = t("receiver.receivingTitle", "正在接收文件");
     $("#receiver-message").textContent = t("receiver.tempStorage", "文件会逐个写入浏览器临时存储，请保持页面打开。");
     state.accepted = true;
     await sendSecure("accept", null);
@@ -915,7 +915,7 @@ async function finishIncomingFile(expected) {
     $("#receiver-progress-label").textContent = t("receiver.allVerified", "全部接收并校验完成");
     $("#receiver-percent").textContent = "100%";
     $("#receiver-kicker").textContent = t("receiver.intact", "所有文件完好无损");
-    $("#receiver-title").innerHTML = t("receiver.saveTitle", "文件到了，<br><em>请逐个保存。</em>");
+    $("#receiver-title").innerHTML = t("receiver.saveTitle", "文件已接收");
     $("#receiver-message").textContent = t("receiver.saveMessage", "每点击一次保存，发送方都会看到状态；浏览器无法确认磁盘写入结果。");
     $("#receiver-animation").classList.add("complete");
   }
@@ -994,7 +994,7 @@ async function startClaimedReceiver(roomId, receiverToken, code, verificationReq
 
 function showReceiptConfirmation() {
   $("#receiver-kicker").textContent = t("receiver.entryVerified", "取件入口验证成功");
-  $("#receiver-title").innerHTML = t("receiver.confirmTitle", "确认收到，<br><em>再开始计时。</em>");
+  $("#receiver-title").innerHTML = t("receiver.confirmTitle", "确认收到");
   $("#receiver-message").textContent = t("receiver.confirmMessage", "点击下面按钮后，发送方会看到确认，20 分钟接收倒计时才会开始。");
   $("#receiver-pairing").classList.add("hidden");
   $("#receipt-confirmation").classList.remove("hidden");
@@ -1013,11 +1013,11 @@ async function confirmReceipt() {
       $("#receiver-pair-code").textContent = formatCode(state.pairingCode);
       $("#receiver-pairing").classList.remove("hidden");
       $("#receiver-kicker").textContent = t("receiver.timerStarted", "20 分钟倒计时已开始");
-      $("#receiver-title").innerHTML = t("receiver.codeTitle", "再核对一次，<br><em>就可以接收。</em>");
+      $("#receiver-title").innerHTML = t("receiver.codeTitle", "核对验证码");
       $("#receiver-message").textContent = t("receiver.codeMessage", "请把六位验证码告诉发送方；一致后才会建立连接。");
     } else {
       $("#receiver-kicker").textContent = t("receiver.senderNotified", "已通知发送方");
-      $("#receiver-title").innerHTML = t("receiver.pairTitle", "确认完成，<br><em>正在安全配对。</em>");
+      $("#receiver-title").innerHTML = t("receiver.pairTitle", "正在建立安全连接");
       $("#receiver-message").textContent = t("receiver.pairMessage", "本次无需验证码，正在建立端到端加密连接。");
     }
     startPolling(handleReceiverSignal);

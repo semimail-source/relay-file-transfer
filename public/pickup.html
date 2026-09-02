@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#f4f1e8">
+    <meta name="theme-color" content="#ffffff">
     <title data-i18n="meta.pickupTitle">输入取件码 — Relay</title>
-    <link rel="stylesheet" href="/styles.css?v=5">
-    <script src="/i18n.js?v=5" defer></script>
+    <link rel="stylesheet" href="/styles.css?v=6">
+    <script src="/i18n.js?v=6" defer></script>
     <script src="/pickup-crypto.js" defer></script>
     <script src="/pickup.js?v=3" defer></script>
   </head>
@@ -16,7 +16,7 @@
 
     <header class="site-header">
       <a class="brand" href="/" aria-label="Relay 首页" data-i18n-aria="common.homeAria" data-language-link>
-        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M6 7h11m0 0-3-3m3 3-3 3M18 17H7m0 0 3 3m-3-3 3-3"/></svg></span>
         <span>Relay</span>
       </a>
       <div class="header-actions">
@@ -27,9 +27,9 @@
 
     <main class="pickup-main">
       <section class="pickup-card">
-        <div class="pickup-orbit" aria-hidden="true"><span>↓</span></div>
-        <p class="eyebrow" data-i18n="pickup.eyebrow">固定取件入口</p>
-        <h1 data-i18n-html="pickup.title">输入取件码，<br><em>把文件接住。</em></h1>
+        <div class="pickup-orbit" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 4v11m0 0 4-4m-4 4-4-4M5 19.5h14"/></svg></div>
+        <p class="eyebrow" data-i18n="pickup.eyebrow">Relay 取件</p>
+        <h1 data-i18n-html="pickup.title">输入取件码</h1>
         <p class="pickup-message" data-i18n="pickup.message">输入发送方告诉你的“英文名字 + 6 位数字”。双方仍需同时在线；如果发送方开启了额外验证，页面才会显示六位验证码。</p>
         <form id="pickup-form" class="pickup-form">
           <label for="pickup-input" data-i18n="pickup.label">取件码</label>

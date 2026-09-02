@@ -3,9 +3,9 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#f4f1e8">
+    <meta name="theme-color" content="#ffffff">
     <title>Relay — 中继安全控制</title>
-    <link rel="stylesheet" href="/styles.css?v=5">
+    <link rel="stylesheet" href="/styles.css?v=6">
     <script src="/admin.js" defer></script>
   </head>
   <body>
@@ -14,7 +14,7 @@
 
     <header class="site-header">
       <a class="brand" href="/" aria-label="Relay 首页">
-        <span class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></span>
+        <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M6 7h11m0 0-3-3m3 3-3 3M18 17H7m0 0 3 3m-3-3 3-3"/></svg></span>
         <span>Relay</span>
       </a>
       <div class="privacy-pill"><span></span> 管理员控制台</div>
@@ -23,7 +23,7 @@
     <main class="admin-main">
       <section class="admin-card">
         <p class="eyebrow">TURN SAFETY CONTROL</p>
-        <h1>把公网中继，<br><em>锁在免费额度内。</em></h1>
+        <h1>公网中继控制</h1>
         <p class="lede">系统在签发中继凭证前检查当月 Cloudflare 出口流量；达到 800GB 后自动停止。关闭中继不会影响同一网络的浏览器直连。</p>
 
         <form id="admin-login" class="admin-login">
