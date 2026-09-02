@@ -70,6 +70,8 @@ test("serves the encrypted sender page with security headers", async () => {
   assert.match(html, /id="task-panels"/);
   assert.match(html, /id="sender-wake-status"/);
   assert.match(html, /id="receiver-wake-status"/);
+  assert.match(html, /class="transfer-nav-link active"[^>]+data-i18n="nav.send"/);
+  assert.match(html, /class="transfer-nav-link"[^>]+data-i18n="nav.pickup"/);
   assert.match(response.headers.get("content-security-policy"), /default-src 'self'/);
   assert.match(response.headers.get("content-security-policy"), /frame-ancestors 'self'/);
   assert.equal(response.headers.get("x-frame-options"), "SAMEORIGIN");
@@ -275,6 +277,8 @@ test("serves a name-plus-six-digits, case-insensitive pickup-code entry page", a
   const html = await response.text();
   assert.match(html, /4–6 位英文字母 \+ 6 位数字，不区分大小写/);
   assert.match(html, /id="pickup-input"[^>]+maxlength="13"/);
+  assert.match(html, /class="transfer-nav-link"[^>]+data-i18n="nav.send"/);
+  assert.match(html, /class="transfer-nav-link active"[^>]+data-i18n="nav.pickup"/);
 });
 
 test("claims an active generated pickup code once and marks the join as pickup", async () => {

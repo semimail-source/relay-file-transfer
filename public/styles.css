@@ -88,7 +88,7 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
 .brand-mark svg { width: 20px; height: 20px; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .header-actions { display: flex; align-items: center; gap: 9px; }
 
-.pickup-nav, .language-toggle, .privacy-pill {
+.language-toggle, .privacy-pill {
   min-height: 36px;
   display: inline-flex;
   align-items: center;
@@ -100,8 +100,27 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 3px solid 
   font-weight: 700;
 }
 
-.pickup-nav, .language-toggle { padding: 0 14px; color: var(--ink); text-decoration: none; cursor: pointer; }
-.pickup-nav:hover, .language-toggle:hover { border-color: var(--line-strong); background: var(--surface); }
+.transfer-nav { display: inline-flex; align-items: center; gap: 5px; }
+.transfer-nav-link {
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 15px;
+  border: 1px solid var(--ink);
+  border-radius: 999px;
+  color: var(--ink);
+  background: var(--paper);
+  font-size: 12px;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.transfer-nav-link:hover { background: var(--surface); }
+.transfer-nav-link.active { color: var(--paper); background: var(--ink); }
+.transfer-nav-link.active:hover { background: var(--green-dark); }
+.language-toggle { padding: 0 14px; color: var(--ink); text-decoration: none; cursor: pointer; }
+.language-toggle:hover { border-color: var(--line-strong); background: var(--surface); }
 .privacy-pill { gap: 8px; padding: 0 14px; color: var(--muted); }
 .privacy-pill > span:first-child, .privacy-pill > span:only-child { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--green); }
 
@@ -346,7 +365,9 @@ html:has(body.embedded-sender), body.embedded-sender { min-height: 0; background
   .site-header { height: 68px; }
   .privacy-pill { display: none; }
   .header-actions { gap: 6px; }
-  .pickup-nav, .language-toggle { min-height: 34px; padding: 0 11px; font-size: 10px; }
+  .transfer-nav { gap: 4px; }
+  .transfer-nav-link { min-height: 34px; padding: 0 10px; font-size: 10px; }
+  .language-toggle { min-height: 34px; padding: 0 10px; font-size: 10px; }
   main { min-height: calc(100vh - 124px); }
   .pickup-main, .admin-main { width: min(100% - 28px, 780px); }
   h1 { font-size: 42px; }
@@ -375,6 +396,10 @@ html:has(body.embedded-sender), body.embedded-sender { min-height: 0; background
   .admin-metrics { grid-template-columns: 1fr; }
   footer { min-height: 56px; }
   footer span:last-child { display: none; }
+}
+
+@media (max-width: 360px) {
+  .brand > span:last-child { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
