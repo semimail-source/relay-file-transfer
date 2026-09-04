@@ -333,6 +333,9 @@ h1 em { color: var(--green); font-family: inherit; font-style: normal; font-weig
 .status-copy > span { color: var(--green); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 9px; font-weight: 400; letter-spacing: 0.08em; text-transform: uppercase; }
 .status-copy strong { margin-top: 7px; font-size: 21px; line-height: 1.25; letter-spacing: -0.025em; }
 .status-copy small { margin-top: 9px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+.connection-route { width: fit-content; padding: 5px 8px; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 9px; font-weight: 400; letter-spacing: 0.04em; }
+.status-copy .connection-route { margin-top: 10px; }
+.receiver-route { margin: 10px auto 0; }
 .wake-status, .expiry-badge { width: fit-content; max-width: 100%; margin: 14px 0 0; border: 1px solid #d4d4d4; border-radius: 8px; color: var(--ink); background: var(--green-soft); font-size: 10px; font-weight: 400; }
 .wake-status { padding: 8px 11px; line-height: 1.45; }
 .wake-status[data-kind="unsupported"], .wake-status[data-kind="denied"] { color: var(--muted); border-color: #d4d4d4; background: var(--yellow-soft); }

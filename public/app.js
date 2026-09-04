@@ -18,6 +18,11 @@ const {
   isValidChunkSize,
   selectChunkSize
 } = window.RelayChunking;
+const {
+  waitForWritableBuffer,
+  createRateTracker,
+  sampleRate
+} = window.RelayTransferFlow;
 const MAX_FILES = 100;
 const MAX_SENDER_TASKS = 6;
 const DANGEROUS_EXTENSIONS = /\.(?:exe|msi|bat|cmd|com|scr|ps1|vbs|jar|app|pkg|dmg|sh)$/i;
@@ -39,6 +44,10 @@ const state = {
   pollTimer: null,
   relayMonitorTimer: null,
   relayCredentialIssued: false,
+  connectionPath: null,
+  connectionPathPromise: null,
+  sendRateTracker: null,
+  receiveRateTracker: null,
   lastSignal: 0,
   pendingCandidates: [],
   manifest: null,
@@ -547,12 +556,12 @@ async function makePeer(role) {
   if (state.peer) return state.peer;
   const peer = new RTCPeerConnection({ iceServers: await getIceConfiguration() });
   state.peer = peer;
-  if (role === "sender" && state.relayCredentialIssued) startRelayMonitoring();
   peer.addEventListener("icecandidate", event => {
     if (event.candidate) postSignal("candidate", event.candidate.toJSON()).catch(showConnectionError);
   });
   peer.addEventListener("connectionstatechange", () => {
     clearTimeout(state.disconnectTimer);
+    if (peer.connectionState === "connected") updateConnectionPath(peer, role).catch(() => {});
     if (peer.connectionState === "connected" && role === "sender") {
       $("#sender-orb").classList.add("connected");
       $("#sender-kicker").textContent = t("sender.connectedKicker", "接收设备已连接");
@@ -568,6 +577,71 @@ async function makePeer(role) {
     }
   });
   return peer;
+}
+
+function selectedCandidatePair(stats) {
+  const reports = new Map();
+  stats.forEach(report => reports.set(report.id, report));
+
+  for (const report of reports.values()) {
+    if (report.type === "transport" && report.selectedCandidatePairId) {
+      const pair = reports.get(report.selectedCandidatePairId);
+      if (pair) return { pair, reports };
+    }
+  }
+  for (const report of reports.values()) {
+    if (report.type === "candidate-pair" && report.state === "succeeded" && (report.selected || report.nominated)) {
+      return { pair: report, reports };
+    }
+  }
+  return null;
+}
+
+async function inspectConnectionPath(peer) {
+  const result = selectedCandidatePair(await peer.getStats());
+  if (!result) return null;
+  const local = result.reports.get(result.pair.localCandidateId);
+  const remote = result.reports.get(result.pair.remoteCandidateId);
+  const types = [local?.candidateType, remote?.candidateType].filter(Boolean);
+  if (types.includes("relay")) return "relay";
+  if (types.length === 2 && types.every(type => type === "host")) return "lan";
+  if (types.length) return "direct";
+  return null;
+}
+
+function setConnectionRoute(role, path) {
+  const element = $(`#${role}-route`);
+  if (!element || !path) return;
+  const labels = {
+    lan: t("connection.lan", "局域网直连"),
+    direct: t("connection.direct", "公网直连"),
+    relay: t("connection.relay", "公网中继")
+  };
+  element.textContent = labels[path] || "";
+  element.hidden = !labels[path];
+}
+
+async function updateConnectionPath(peer, role) {
+  if (state.connectionPathPromise) return state.connectionPathPromise;
+  state.connectionPathPromise = (async () => {
+    let path = null;
+    for (let attempt = 0; attempt < 8 && !path; attempt += 1) {
+      try {
+        path = await inspectConnectionPath(peer);
+      } catch (_) {
+        // RTC stats can be temporarily unavailable immediately after connecting.
+      }
+      if (!path) await new Promise(resolve => setTimeout(resolve, 250));
+    }
+    state.connectionPath = path;
+    setConnectionRoute(role, path);
+    if (role === "sender" && state.relayCredentialIssued) {
+      if (path === "relay" || !path) startRelayMonitoring();
+      else stopRelayMonitoring();
+    }
+    return path;
+  })();
+  return state.connectionPathPromise;
 }
 
 async function addCandidate(candidate) {
@@ -663,16 +737,23 @@ function wireSenderChannel(channel) {
 }
 
 async function waitForBuffer(channel) {
-  if (channel.bufferedAmount <= 2 * 1024 * 1024) return;
-  await new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error(t("error.bufferTimeout", "发送缓冲区响应超时。"))), 20_000);
-    const ready = () => { clearTimeout(timeout); resolve(); };
-    channel.addEventListener("bufferedamountlow", ready, { once: true });
-  });
+  try {
+    await waitForWritableBuffer(channel);
+  } catch (error) {
+    if (error?.code === "channel_closed" || error?.message === "channel_closed") {
+      throw new Error(t("error.channelClosed", "传输期间连接已关闭。"));
+    }
+    throw error;
+  }
+}
+
+function formatRate(bytesPerSecond) {
+  return `${formatBytes(bytesPerSecond)}/s`;
 }
 
 async function sendFiles() {
   state.sending = true;
+  state.sendRateTracker = createRateTracker(performance.now(), 0);
   await acquireTransferWakeLock();
   const batchSize = totalSize(state.files);
   let batchOffset = 0;
@@ -708,6 +789,18 @@ async function sendFiles() {
       offset += plain.byteLength;
       batchOffset += plain.byteLength;
       chunkIndex += 1;
+      const bytesPerSecond = sampleRate(state.sendRateTracker, batchOffset, performance.now());
+      if (bytesPerSecond !== null) {
+        $("#sender-detail").textContent = t(
+          "sender.transferLive",
+          `${state.files.length} 个文件 · ${formatBytes(batchSize)} · ${formatRate(bytesPerSecond)} · 请保持页面打开`,
+          {
+            count: state.files.length,
+            size: formatBytes(batchSize),
+            speed: formatRate(bytesPerSecond)
+          }
+        );
+      }
       const percent = batchSize ? Math.min(100, Math.round((batchOffset / batchSize) * 100)) : 100;
       $("#sender-progress").style.width = `${percent}%`;
       $("#sender-percent").textContent = `${percent}%`;
@@ -934,6 +1027,7 @@ async function acceptFile() {
     $("#receiver-title").innerHTML = t("receiver.receivingTitle", "正在接收文件");
     $("#receiver-message").textContent = t("receiver.tempStorage", "文件会逐个写入浏览器临时存储，请保持页面打开。");
     state.accepted = true;
+    state.receiveRateTracker = createRateTracker(performance.now(), state.totalReceivedBytes);
     await sendSecure("accept", null);
   } catch (_) {
     releaseTransferWakeLock();
@@ -990,7 +1084,8 @@ async function receiveEncryptedChunk(value) {
   const percent = state.manifest.totalSize ? Math.min(100, Math.round((state.totalReceivedBytes / state.manifest.totalSize) * 100)) : 100;
   $("#receiver-progress").style.width = `${percent}%`;
   $("#receiver-percent").textContent = `${percent}%`;
-  $("#receiver-bytes").textContent = `${formatBytes(state.totalReceivedBytes)} / ${formatBytes(state.manifest.totalSize)}`;
+  const bytesPerSecond = sampleRate(state.receiveRateTracker, state.totalReceivedBytes, performance.now());
+  $("#receiver-bytes").textContent = `${formatBytes(state.totalReceivedBytes)} / ${formatBytes(state.manifest.totalSize)}${bytesPerSecond === null ? "" : ` · ${formatRate(bytesPerSecond)}`}`;
 }
 
 async function finishIncomingFile(expected) {
