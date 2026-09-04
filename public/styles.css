@@ -292,10 +292,11 @@ h1 em { color: var(--green); font-family: inherit; font-style: normal; font-weig
 .pickup-name-field input { margin-top: 9px; padding: 11px 13px; font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 15px; font-weight: 400; letter-spacing: 0.08em; text-transform: uppercase; }
 .pickup-name-field input:focus, .pickup-form input:focus, .admin-login input:focus { border-color: var(--ink); outline: 3px solid rgba(17, 17, 17, 0.1); }
 .pickup-name-field > small { display: block; margin-top: 7px; line-height: 1.5; }
-.verification-option { display: flex; align-items: center; gap: 11px; margin: 14px 2px 0; color: var(--ink); cursor: pointer; }
+.sender-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
+.verification-option { display: flex; align-items: center; gap: 11px; min-height: 54px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: var(--paper); cursor: pointer; }
 .verification-option input { width: 17px; height: 17px; flex: 0 0 auto; accent-color: var(--green); }
 .verification-option span { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
-.verification-option strong { font-size: 11px; }
+.verification-option strong { font-size: 11px; font-weight: 500; }
 .verification-option small { color: var(--muted); font-size: 10px; line-height: 1.4; }
 
 .primary-button { width: 100%; min-height: 48px; margin-top: 15px; padding: 0 16px; border: 0; border-radius: 9px; display: flex; align-items: center; justify-content: space-between; color: white; background: var(--green); cursor: pointer; font-size: 12px; font-weight: 400; text-decoration: none; transition: background-color 150ms ease; }
@@ -325,6 +326,25 @@ h1 em { color: var(--green); font-family: inherit; font-style: normal; font-weig
 .pickup-share .copy-button { flex: 0 0 auto; }
 
 .status-card { position: relative; min-height: 100%; padding: 28px; display: flex; flex-direction: column; justify-content: center; }
+.multi-status-card { min-height: 100%; padding: 22px; display: flex; flex-direction: column; }
+.multi-status-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.multi-status-head > div { display: flex; flex-direction: column; gap: 4px; }
+.multi-status-head > div span { color: var(--green); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; }
+.multi-status-head strong { font-size: 17px; font-weight: 500; }
+.multi-status-head > span { color: var(--muted); font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; font-size: 10px; }
+.multi-session-empty { margin: auto 0; padding: 36px 0; color: var(--muted); font-size: 12px; text-align: center; }
+.multi-session-list { display: grid; gap: 9px; margin-top: 16px; }
+.multi-session { padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.multi-session-top, .multi-session-meta, .multi-session-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.multi-session-name { font-size: 12px; font-weight: 500; }
+.multi-session-state { color: var(--green); font-size: 9px; }
+.multi-session-meta { margin-top: 6px; color: var(--muted); font-size: 9px; }
+.multi-session-code { font-family: ui-monospace, "SFMono-Regular", Consolas, monospace; letter-spacing: 0.06em; }
+.multi-session .progress-track { height: 4px; margin-top: 10px; }
+.multi-session-actions { margin-top: 9px; }
+.multi-session-actions button { min-height: 30px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 8px; color: var(--ink); background: var(--paper); cursor: pointer; font: inherit; font-size: 9px; }
+.multi-session-actions button[data-action="stop"] { color: var(--danger); }
+.multi-bandwidth-note { margin: 14px 0 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
 .status-orb { width: 14px; height: 14px; display: grid; place-items: center; border: 1px solid #cfcfcf; border-radius: 50%; background: var(--yellow-soft); }
 .status-orb span { width: 6px; height: 6px; border-radius: 50%; background: #777777; }
 .status-orb.connected { border-color: #aaaaaa; background: var(--green-soft); }
@@ -482,6 +502,7 @@ html:has(body.embedded-sender), body.embedded-sender { min-height: 0; background
   .file-picker-actions { width: 100%; }
   .picker-button { flex: 1 1 130px; padding: 0 10px; }
   .pickup-name-field label { align-items: flex-start; flex-direction: column; gap: 3px; }
+  .sender-options { grid-template-columns: 1fr; }
   .share-stack { grid-template-columns: 1fr; }
   .status-card { min-height: 280px; }
   .receiver-layout { min-height: calc(100vh - 124px); padding: 34px 0 52px; }

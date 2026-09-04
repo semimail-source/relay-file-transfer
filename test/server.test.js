@@ -65,6 +65,9 @@ test("serves the encrypted sender page with security headers", async () => {
   assert.match(html, /id="file-input" type="file" multiple/);
   assert.match(html, /id="pickup-name"[^>]+maxlength="6"/);
   assert.match(html, /id="verification-required" type="checkbox"/);
+  assert.match(html, /id="multi-recipient" type="checkbox"/);
+  assert.match(html, /id="multi-status-card"/);
+  assert.match(html, /id="multi-stop-all"/);
   assert.match(html, /id="download-list"/);
   assert.match(html, /id="add-sender-task"/);
   assert.match(html, /id="task-panels"/);
@@ -138,7 +141,7 @@ test("lets either device stop an active transfer and warns before leaving", asyn
   const html = await pageResponse.text();
   assert.match(html, /id="sender-stop-transfer"/);
   assert.match(html, /id="receiver-stop-transfer"/);
-  assert.equal((html.match(/data-i18n="transfer\.keepOpen"/g) || []).length, 2);
+  assert.equal((html.match(/data-i18n="transfer\.keepOpen"/g) || []).length, 3);
 
   const scriptResponse = await fetch(`${origin}/app.js`);
   assert.equal(scriptResponse.status, 200);
@@ -148,6 +151,8 @@ test("lets either device stop an active transfer and warns before leaving", asyn
   assert.match(script, /await abortReceiveSink\(\)/);
   assert.match(script, /window\.addEventListener\("beforeunload"/);
   assert.match(script, /event\.returnValue = ""/);
+  assert.match(script, /senderSessions: new Map\(\)/);
+  assert.match(script, /terminateAllSenderSessions/);
 });
 
 test("reports local signaling and TURN configuration", async () => {
@@ -273,6 +278,11 @@ test("creates role secrets, allows one receiver claim, and announces its code", 
   assert.equal(first.response.status, 201);
   assert.match(first.body.code, /^\d{6}$/);
   assert.match(first.body.receiverToken, /^[A-Za-z0-9_-]{32,128}$/);
+  assert.match(first.body.receiverId, /^[A-Za-z0-9_-]{10,20}$/);
+  assert.equal(room.multiRecipient, false);
+  assert.equal(room.maxReceivers, 1);
+  assert.equal(first.body.multiRecipient, false);
+  assert.equal(first.body.maxReceivers, 1);
 
   const second = await claimRoom(room);
   assert.equal(second.response.status, 409);
@@ -284,6 +294,60 @@ test("creates role secrets, allows one receiver claim, and announces its code", 
   assert.equal(result.messages[0].type, "join");
   assert.equal(result.messages[0].data.code, first.body.code);
   assert.equal(result.messages[0].data.pickup, false);
+  assert.equal(result.messages[0].receiverId, first.body.receiverId);
+});
+
+test("isolates signaling for up to five recipients across direct and pickup claims", async () => {
+  const hash = pickupHash("Relay-135790");
+  const room = await createRoom({ pickupCodeHash: hash, multiRecipient: true });
+  assert.equal(room.multiRecipient, true);
+  assert.equal(room.maxReceivers, 5);
+
+  const direct = await claimRoom(room);
+  assert.equal(direct.response.status, 201);
+  const pickupResponse = await fetch(`${origin}/api/pickup/claim`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ pickupCodeHash: hash })
+  });
+  assert.equal(pickupResponse.status, 201);
+  const pickup = await pickupResponse.json();
+  assert.notEqual(direct.body.receiverId, pickup.receiverId);
+  assert.equal(pickup.multiRecipient, true);
+  assert.equal(pickup.maxReceivers, 5);
+
+  const endpoint = `${origin}/api/rooms/${room.roomId}/signals`;
+  const approval = await fetch(endpoint, {
+    method: "POST",
+    headers: { ...bearer(room.senderToken), "content-type": "application/json" },
+    body: JSON.stringify({ type: "approved", data: null, receiverId: direct.body.receiverId })
+  });
+  assert.equal(approval.status, 201);
+  const directMessages = await fetch(`${endpoint}?after=0`, { headers: bearer(direct.body.receiverToken) });
+  assert.deepEqual((await directMessages.json()).messages.map(message => message.type), ["approved"]);
+  const pickupMessages = await fetch(`${endpoint}?after=0`, { headers: bearer(pickup.receiverToken) });
+  assert.deepEqual((await pickupMessages.json()).messages, []);
+
+  const answer = await fetch(endpoint, {
+    method: "POST",
+    headers: { ...bearer(pickup.receiverToken), "content-type": "application/json" },
+    body: JSON.stringify({ type: "answer", data: { type: "answer", sdp: "recipient two" } })
+  });
+  assert.equal(answer.status, 201);
+  const senderMessages = await fetch(`${endpoint}?after=0`, { headers: bearer(room.senderToken) });
+  const senderResult = await senderMessages.json();
+  assert.deepEqual(senderResult.messages.slice(0, 2).map(message => message.receiverId), [direct.body.receiverId, pickup.receiverId]);
+  assert.equal(senderResult.messages.at(-1).receiverId, pickup.receiverId);
+  assert.equal(senderResult.messages.at(-1).type, "answer");
+
+  const remaining = [];
+  for (let index = 0; index < 3; index += 1) remaining.push(await claimRoom(room));
+  assert.ok(remaining.every(result => result.response.status === 201));
+  const receiverIds = [direct.body.receiverId, pickup.receiverId, ...remaining.map(result => result.body.receiverId)];
+  assert.equal(new Set(receiverIds).size, 5);
+  const full = await claimRoom(room);
+  assert.equal(full.response.status, 409);
+  assert.equal(full.body.error, "room_full");
 });
 
 test("starts the 20-minute expiry only when the receiver explicitly confirms", async () => {
@@ -391,6 +455,14 @@ test("rejects a non-boolean verification setting", async () => {
   });
   assert.equal(response.status, 400);
   assert.equal((await response.json()).error, "invalid_verification_setting");
+
+  const multiResponse = await fetch(`${origin}/api/rooms`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ multiRecipient: "true" })
+  });
+  assert.equal(multiResponse.status, 400);
+  assert.equal((await multiResponse.json()).error, "invalid_multi_recipient_setting");
 });
 
 test("requires role authentication and relays only valid signaling", async () => {
@@ -416,6 +488,26 @@ test("requires role authentication and relays only valid signaling", async () =>
   const receiverMessages = await fetch(`${endpoint}?after=0`, { headers: bearer(claim.body.receiverToken) });
   const result = await receiverMessages.json();
   assert.deepEqual(result.messages.map(message => message.type), ["approved"]);
+
+  const senderTerminate = await fetch(endpoint, {
+    method: "POST",
+    headers: { ...bearer(room.senderToken), "content-type": "application/json" },
+    body: JSON.stringify({ type: "terminate", data: { reason: "user" } })
+  });
+  assert.equal(senderTerminate.status, 201);
+  const receiverAfterTerminate = await fetch(`${endpoint}?after=${result.messages.at(-1).id}`, { headers: bearer(claim.body.receiverToken) });
+  assert.deepEqual((await receiverAfterTerminate.json()).messages.map(message => message.type), ["terminate"]);
+
+  const receiverTerminate = await fetch(endpoint, {
+    method: "POST",
+    headers: { ...bearer(claim.body.receiverToken), "content-type": "application/json" },
+    body: JSON.stringify({ type: "terminate", data: { reason: "user" } })
+  });
+  assert.equal(receiverTerminate.status, 201);
+  const senderMessages = await fetch(`${endpoint}?after=1`, { headers: bearer(room.senderToken) });
+  const senderResult = await senderMessages.json();
+  assert.equal(senderResult.messages.at(-1).type, "terminate");
+  assert.equal(senderResult.messages.at(-1).receiverId, claim.body.receiverId);
 });
 
 test("returns ICE configuration only to room participants", async () => {

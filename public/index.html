@@ -156,10 +156,16 @@
             <input id="pickup-name" type="text" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="例如 EMMA" data-i18n-placeholder="sender.namePlaceholder" aria-describedby="pickup-name-help">
             <small id="pickup-name-help" data-i18n="sender.nameHelp">自动追加 6 位数字 · 一次有效</small>
           </div>
-          <label class="verification-option" for="verification-required">
-            <input id="verification-required" type="checkbox">
-            <span><strong data-i18n="sender.verifyTitle">验证码</strong><small data-i18n="sender.verifyHelp">可选 · 双方核对 6 位数字</small></span>
-          </label>
+          <div class="sender-options">
+            <label class="verification-option" for="verification-required">
+              <input id="verification-required" type="checkbox">
+              <span><strong data-i18n="sender.verifyTitle">验证码</strong><small data-i18n="sender.verifyHelp">可选 · 双方核对 6 位数字</small></span>
+            </label>
+            <label class="verification-option" for="multi-recipient">
+              <input id="multi-recipient" type="checkbox">
+              <span><strong data-i18n="sender.multiTitle">多人接收</strong><small data-i18n="sender.multiHelp">可选 · 同一入口最多 5 台设备</small></span>
+            </label>
+          </div>
           <button id="create-room" class="primary-button" type="button" disabled><span data-i18n="sender.create">生成接收方式</span><span aria-hidden="true">→</span></button>
           <p id="start-error" class="error-message" role="alert"></p>
         </div>
@@ -184,7 +190,7 @@
             </div>
           </article>
 
-          <article class="status-card">
+          <article id="sender-status-card" class="status-card">
             <div class="status-orb" id="sender-orb"><span></span></div>
             <div class="status-copy">
               <span id="sender-kicker" data-i18n="status.waitingKicker">等待对方打开网址</span>
@@ -204,6 +210,22 @@
             <div id="sender-transfer-actions" class="transfer-actions hidden">
               <span class="transfer-warning" data-i18n="transfer.keepOpen">传输期间，请勿关闭窗口</span>
               <button id="sender-stop-transfer" class="stop-transfer-button" type="button" data-i18n="transfer.stop">终止传输</button>
+            </div>
+          </article>
+
+          <article id="multi-status-card" class="multi-status-card hidden">
+            <div class="multi-status-head">
+              <div><span data-i18n="multi.label">接收设备</span><strong data-i18n="multi.title">多人接收</strong></div>
+              <span id="multi-session-count">0 / 5</span>
+            </div>
+            <div id="multi-expiry" class="expiry-badge hidden"><span data-i18n="status.remaining">本次接收剩余</span><strong id="multi-expiry-time">20:00</strong></div>
+            <p id="multi-session-empty" class="multi-session-empty" data-i18n="multi.waiting">等待接收设备打开入口</p>
+            <div id="multi-session-list" class="multi-session-list"></div>
+            <p class="multi-bandwidth-note" data-i18n="multi.bandwidth">每台设备独立传输；接收人数越多，占用的上行带宽越多。</p>
+            <p id="multi-sender-wake-status" class="wake-status hidden" role="status"></p>
+            <div id="multi-transfer-actions" class="transfer-actions">
+              <span class="transfer-warning" data-i18n="transfer.keepOpen">传输期间，请勿关闭窗口</span>
+              <button id="multi-stop-all" class="stop-transfer-button" type="button" data-i18n="multi.stopAll">全部终止</button>
             </div>
           </article>
         </div>

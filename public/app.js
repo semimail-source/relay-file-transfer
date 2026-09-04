@@ -39,6 +39,12 @@ const state = {
   transferKeyValue: null,
   receiverNeedsKey: false,
   verificationRequired: false,
+  multiRecipient: false,
+  maxReceivers: 1,
+  receiverId: null,
+  senderSessions: new Map(),
+  nextReceiverNumber: 1,
+  iceServers: null,
   peer: null,
   channel: null,
   pollTimer: null,
@@ -320,7 +326,8 @@ function formatBytes(bytes) {
 }
 
 function wakeLockStatusElement() {
-  return state.role === "receiver" ? $("#receiver-wake-status") : $("#sender-wake-status");
+  if (state.role === "receiver") return $("#receiver-wake-status");
+  return state.multiRecipient ? $("#multi-sender-wake-status") : $("#sender-wake-status");
 }
 
 function showWakeLockStatus(kind) {
@@ -394,8 +401,12 @@ function stopExpiryCountdown() {
 function startExpiryCountdown(expiresAt) {
   stopExpiryCountdown();
   const target = Date.parse(expiresAt);
-  const badge = state.role === "sender" ? $("#sender-expiry") : $("#receiver-expiry");
-  const value = state.role === "sender" ? $("#sender-expiry-time") : $("#receiver-expiry-time");
+  const badge = state.role === "sender"
+    ? (state.multiRecipient ? $("#multi-expiry") : $("#sender-expiry"))
+    : $("#receiver-expiry");
+  const value = state.role === "sender"
+    ? (state.multiRecipient ? $("#multi-expiry-time") : $("#sender-expiry-time"))
+    : $("#receiver-expiry-time");
   badge.classList.remove("hidden");
   const tick = () => {
     const remaining = Math.max(0, target - Date.now());
@@ -407,6 +418,7 @@ function startExpiryCountdown(expiresAt) {
       stopPolling();
       stopRelayMonitoring();
       state.peer?.close();
+      for (const session of state.senderSessions.values()) session.peer?.close();
       showConnectionError(new Error(t("error.expiredWindow", "本次 20 分钟接收时间已结束，请让发送方重新生成。")));
       return;
     }
@@ -483,12 +495,16 @@ function chunkIv(prefix, index) {
   return iv;
 }
 
-async function sendSecure(type, payload) {
-  if (state.channel?.readyState !== "open") throw new Error(t("error.channelClosed", "连接已经关闭。"));
+async function sendSecureTo(channel, type, payload) {
+  if (channel?.readyState !== "open") throw new Error(t("error.channelClosed", "连接已经关闭。"));
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const plaintext = new TextEncoder().encode(JSON.stringify({ type, payload }));
   const encrypted = await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: roomAdditionalData() }, state.cryptoKey, plaintext);
-  state.channel.send(JSON.stringify({ secure: 1, iv: base64UrlEncode(iv), data: base64UrlEncode(encrypted) }));
+  channel.send(JSON.stringify({ secure: 1, iv: base64UrlEncode(iv), data: base64UrlEncode(encrypted) }));
+}
+
+async function sendSecure(type, payload) {
+  return sendSecureTo(state.channel, type, payload);
 }
 
 async function decryptSecure(value) {
@@ -502,14 +518,15 @@ async function decryptSecure(value) {
   return JSON.parse(new TextDecoder().decode(plaintext));
 }
 
-async function postSignal(type, data) {
+async function postSignal(type, data, receiverId = null) {
   return api(`/api/rooms/${encodeURIComponent(state.roomId)}/signals`, {
     method: "POST",
-    body: JSON.stringify({ type, data })
+    body: JSON.stringify({ type, data, ...(receiverId ? { receiverId } : {}) })
   });
 }
 
 async function getIceConfiguration() {
+  if (state.iceServers) return state.iceServers;
   const result = await api(`/api/rooms/${encodeURIComponent(state.roomId)}/ice`);
   state.relayCredentialIssued = result.relayAvailable === true;
   if (!result.relayAvailable) {
@@ -525,12 +542,20 @@ async function getIceConfiguration() {
     };
     detail.textContent = messages[result.relayReason] || messages.not_configured;
   }
-  return result.iceServers;
+  state.iceServers = result.iceServers;
+  return state.iceServers;
 }
 
 function stopRelayMonitoring() {
   if (state.relayMonitorTimer) clearTimeout(state.relayMonitorTimer);
   state.relayMonitorTimer = null;
+}
+
+function senderSessionsNeedingRelayMonitor() {
+  return [...state.senderSessions.values()].filter(session =>
+    session.peer && !session.transferAborted && !session.transferComplete &&
+    (session.connectionPath === "relay" || session.connectionPath === null)
+  );
 }
 
 function startRelayMonitoring() {
@@ -540,14 +565,30 @@ function startRelayMonitoring() {
       const status = await api(`/api/rooms/${encodeURIComponent(state.roomId)}/relay-status`);
       if (!status.enabled) {
         stopRelayMonitoring();
-        state.peer?.close();
-        showConnectionError(new Error(t("error.relayStopped", "公网中继安全保护已触发，当前连接已停止。请下月或开启中继后重新传输。")));
+        const error = new Error(t("error.relayStopped", "公网中继安全保护已触发，当前连接已停止。请下月或开启中继后重新传输。"));
+        if (state.role === "sender") {
+          for (const session of senderSessionsNeedingRelayMonitor()) {
+            session.peer?.close();
+            showSenderSessionError(session, error);
+          }
+        } else {
+          state.peer?.close();
+          showConnectionError(error);
+        }
         return;
       }
     } catch (_) {
       stopRelayMonitoring();
-      state.peer?.close();
-      showConnectionError(new Error(t("error.relayUsage", "无法确认公网中继用量，为避免费用，当前连接已停止。")));
+      const error = new Error(t("error.relayUsage", "无法确认公网中继用量，为避免费用，当前连接已停止。"));
+      if (state.role === "sender") {
+        for (const session of senderSessionsNeedingRelayMonitor()) {
+          session.peer?.close();
+          showSenderSessionError(session, error);
+        }
+      } else {
+        state.peer?.close();
+        showConnectionError(error);
+      }
       return;
     }
     state.relayMonitorTimer = setTimeout(tick, 60_000);
@@ -555,7 +596,155 @@ function startRelayMonitoring() {
   state.relayMonitorTimer = setTimeout(tick, 60_000);
 }
 
-async function makePeer(role) {
+function createSenderSession(receiverId, data = {}) {
+  let session = state.senderSessions.get(receiverId);
+  if (session) return session;
+  session = {
+    receiverId,
+    number: state.nextReceiverNumber++,
+    receiverNeedsKey: data.pickup === true,
+    pairingCode: data.code,
+    confirmed: false,
+    approved: false,
+    peer: null,
+    channel: null,
+    pendingCandidates: [],
+    disconnectTimer: null,
+    connectionPath: null,
+    connectionPathPromise: null,
+    sendRateTracker: null,
+    sentHashes: new Map(),
+    receivedAcks: new Set(),
+    savedAcks: new Set(),
+    sending: false,
+    transferAborted: false,
+    transferComplete: false,
+    chunkSize: SAFE_CHUNK_SIZE,
+    lastTaskProgress: -1,
+    status: "opened",
+    detail: t("sender.timerAfterConfirm", "对方点击确认后，20 分钟倒计时才开始"),
+    percent: null,
+    element: null
+  };
+  state.senderSessions.set(receiverId, session);
+  renderSenderSession(session);
+  return session;
+}
+
+function senderSessionLabel(session) {
+  return t("multi.device", `接收设备 ${session.number}`, { number: session.number });
+}
+
+function senderSessionStatusLabel(session) {
+  const labels = {
+    opened: t("multi.opened", "等待确认"),
+    confirmed: t("multi.confirmed", "已确认"),
+    connecting: t("multi.connecting", "连接中"),
+    verification: t("multi.verification", "等待核对验证码"),
+    connected: t("multi.connected", "等待接收"),
+    transferring: t("multi.transferring", "传输中"),
+    received: t("multi.received", "已接收"),
+    complete: t("multi.complete", "已完成"),
+    stopped: t("multi.stopped", "已终止"),
+    error: t("multi.error", "连接失败")
+  };
+  return labels[session.status] || labels.opened;
+}
+
+function renderSenderSession(session) {
+  if (!state.multiRecipient) return;
+  if (!session.element) {
+    const element = document.createElement("div");
+    element.className = "multi-session";
+    element.innerHTML = `
+      <div class="multi-session-top"><strong class="multi-session-name"></strong><span class="multi-session-state"></span></div>
+      <div class="multi-session-meta"><span class="multi-session-detail"></span><span class="multi-session-percent">—</span></div>
+      <div class="progress-track"><span class="multi-session-progress"></span></div>
+      <div class="multi-session-actions"><span class="multi-session-code"></span><span><button type="button" data-action="approve"></button><button type="button" data-action="stop"></button></span></div>`;
+    element.querySelector('[data-action="approve"]').addEventListener("click", () => approveReceiver(session.receiverId));
+    element.querySelector('[data-action="stop"]').addEventListener("click", () => terminateSenderSession(session, "local"));
+    $("#multi-session-list").append(element);
+    session.element = element;
+  }
+  const element = session.element;
+  element.querySelector(".multi-session-name").textContent = senderSessionLabel(session);
+  element.querySelector(".multi-session-state").textContent = senderSessionStatusLabel(session);
+  element.querySelector(".multi-session-detail").textContent = session.detail || "";
+  element.querySelector(".multi-session-percent").textContent = session.percent === null ? "—" : `${session.percent}%`;
+  element.querySelector(".multi-session-progress").style.width = `${session.percent || 0}%`;
+  const code = element.querySelector(".multi-session-code");
+  code.textContent = state.verificationRequired && session.confirmed && !session.approved
+    ? t("multi.code", `验证码 ${formatCode(session.pairingCode)}`, { code: formatCode(session.pairingCode) })
+    : (session.connectionPath ? connectionRouteLabel(session.connectionPath) : "");
+  const approve = element.querySelector('[data-action="approve"]');
+  approve.textContent = t("multi.approve", "允许连接");
+  approve.classList.toggle("hidden", !state.verificationRequired || !session.confirmed || session.approved || session.transferAborted);
+  approve.disabled = session.approved;
+  const stop = element.querySelector('[data-action="stop"]');
+  stop.textContent = t("transfer.stop", "终止传输");
+  stop.disabled = session.transferAborted || session.transferComplete;
+  $("#multi-session-empty").classList.toggle("hidden", state.senderSessions.size > 0);
+  $("#multi-session-count").textContent = `${state.senderSessions.size} / ${state.maxReceivers}`;
+}
+
+function updateSenderSession(session, updates = {}) {
+  Object.assign(session, updates);
+  if (state.multiRecipient) {
+    renderSenderSession(session);
+    return;
+  }
+  $("#sender-kicker").textContent = senderSessionStatusLabel(session);
+  $("#sender-status").textContent = session.detail || senderSessionStatusLabel(session);
+  if (updates.subdetail !== undefined) $("#sender-detail").textContent = updates.subdetail;
+  if (session.percent !== null) {
+    $("#sender-progress").style.width = `${session.percent}%`;
+    $("#sender-percent").textContent = `${session.percent}%`;
+  }
+}
+
+function connectionRouteLabel(path) {
+  const labels = {
+    lan: t("connection.lan", "局域网直连"),
+    direct: t("connection.direct", "公网直连"),
+    relay: t("connection.relay", "公网中继")
+  };
+  return labels[path] || "";
+}
+
+async function makePeer(role, session = null) {
+  if (role === "sender") {
+    if (!session) throw new Error("receiver_not_ready");
+    if (session.peer) return session.peer;
+    const peer = new RTCPeerConnection({ iceServers: await getIceConfiguration() });
+    session.peer = peer;
+    peer.addEventListener("icecandidate", event => {
+      if (event.candidate) postSignal("candidate", event.candidate.toJSON(), session.receiverId).catch(error => showSenderSessionError(session, error));
+    });
+    peer.addEventListener("connectionstatechange", () => {
+      clearTimeout(session.disconnectTimer);
+      if (session.transferAborted || session.transferComplete) return;
+      if (peer.connectionState === "connected") {
+        updateConnectionPath(peer, role, session).catch(() => {});
+        updateSenderSession(session, {
+          status: "connected",
+          detail: t("sender.waitAccept", "等待对方确认文件"),
+          subdetail: t("sender.encryptedNotStarted", "连接已加密，文件尚未开始传输")
+        });
+        $("#sender-orb").classList.add("connected");
+        notifyTaskParent("connected");
+      } else if (peer.connectionState === "failed") {
+        showSenderSessionError(session, new Error(t("error.directFailed", "无法建立直连。请检查网络，或确认公网中继已经配置。")));
+      } else if (peer.connectionState === "disconnected") {
+        session.disconnectTimer = setTimeout(() => {
+          if (peer.connectionState === "disconnected") {
+            showSenderSessionError(session, new Error(t("error.disconnected", "连接已中断，请重新传输。")));
+          }
+        }, 5000);
+      }
+    });
+    return peer;
+  }
+
   if (state.peer) return state.peer;
   const peer = new RTCPeerConnection({ iceServers: await getIceConfiguration() });
   state.peer = peer;
@@ -566,13 +755,7 @@ async function makePeer(role) {
     clearTimeout(state.disconnectTimer);
     if (state.transferAborted || state.transferComplete) return;
     if (peer.connectionState === "connected") updateConnectionPath(peer, role).catch(() => {});
-    if (peer.connectionState === "connected" && role === "sender") {
-      $("#sender-orb").classList.add("connected");
-      $("#sender-kicker").textContent = t("sender.connectedKicker", "接收设备已连接");
-      $("#sender-status").textContent = t("sender.waitAccept", "等待对方确认文件");
-      $("#sender-detail").textContent = t("sender.encryptedNotStarted", "连接已加密，文件尚未开始传输");
-      notifyTaskParent("connected");
-    } else if (peer.connectionState === "failed") {
+    if (peer.connectionState === "failed") {
       showConnectionError(new Error(t("error.directFailed", "无法建立直连。请检查网络，或确认公网中继已经配置。")));
     } else if (peer.connectionState === "disconnected") {
       state.disconnectTimer = setTimeout(() => {
@@ -616,18 +799,15 @@ async function inspectConnectionPath(peer) {
 function setConnectionRoute(role, path) {
   const element = $(`#${role}-route`);
   if (!element || !path) return;
-  const labels = {
-    lan: t("connection.lan", "局域网直连"),
-    direct: t("connection.direct", "公网直连"),
-    relay: t("connection.relay", "公网中继")
-  };
-  element.textContent = labels[path] || "";
-  element.hidden = !labels[path];
+  const label = connectionRouteLabel(path);
+  element.textContent = label;
+  element.hidden = !label;
 }
 
-async function updateConnectionPath(peer, role) {
-  if (state.connectionPathPromise) return state.connectionPathPromise;
-  state.connectionPathPromise = (async () => {
+async function updateConnectionPath(peer, role, session = null) {
+  const owner = session || state;
+  if (owner.connectionPathPromise) return owner.connectionPathPromise;
+  owner.connectionPathPromise = (async () => {
     let path = null;
     for (let attempt = 0; attempt < 8 && !path; attempt += 1) {
       try {
@@ -637,27 +817,30 @@ async function updateConnectionPath(peer, role) {
       }
       if (!path) await new Promise(resolve => setTimeout(resolve, 250));
     }
-    state.connectionPath = path;
-    setConnectionRoute(role, path);
+    owner.connectionPath = path;
+    if (session) renderSenderSession(session);
+    else setConnectionRoute(role, path);
     if (role === "sender" && state.relayCredentialIssued) {
-      if (path === "relay" || !path) startRelayMonitoring();
+      if (senderSessionsNeedingRelayMonitor().length) startRelayMonitoring();
       else stopRelayMonitoring();
     }
     return path;
   })();
-  return state.connectionPathPromise;
+  return owner.connectionPathPromise;
 }
 
-async function addCandidate(candidate) {
-  if (!state.peer?.remoteDescription) {
-    state.pendingCandidates.push(candidate);
+async function addCandidate(candidate, session = null) {
+  const owner = session || state;
+  if (!owner.peer?.remoteDescription) {
+    owner.pendingCandidates.push(candidate);
     return;
   }
-  await state.peer.addIceCandidate(candidate);
+  await owner.peer.addIceCandidate(candidate);
 }
 
-async function flushCandidates() {
-  for (const candidate of state.pendingCandidates.splice(0)) await state.peer.addIceCandidate(candidate);
+async function flushCandidates(session = null) {
+  const owner = session || state;
+  for (const candidate of owner.pendingCandidates.splice(0)) await owner.peer.addIceCandidate(candidate);
 }
 
 function startPolling(onSignal) {
@@ -686,8 +869,10 @@ function stopPolling() {
 }
 
 function transferInProgress() {
-  return !state.transferAborted && !state.transferComplete &&
-    (state.role === "sender" ? state.sending : state.accepted);
+  if (state.role === "sender") {
+    return [...state.senderSessions.values()].some(session => session.sending && !session.transferAborted && !session.transferComplete);
+  }
+  return !state.transferAborted && !state.transferComplete && state.accepted;
 }
 
 function transferAbortError() {
@@ -744,6 +929,83 @@ function renderTransferStopped(origin) {
   }
 }
 
+function senderHasActiveTransfer(exceptSession = null) {
+  return [...state.senderSessions.values()].some(session => session !== exceptSession && session.sending && !session.transferAborted && !session.transferComplete);
+}
+
+function allSenderSessionsReceived() {
+  const sessions = [...state.senderSessions.values()];
+  return sessions.length > 0 && sessions.every(session => session.transferAborted || session.transferComplete);
+}
+
+function allSenderSessionsFinished() {
+  const sessions = [...state.senderSessions.values()];
+  return sessions.length > 0 && sessions.every(session => session.transferAborted || session.status === "complete");
+}
+
+async function terminateSenderSession(session, origin = "local", { confirmStop = true, deleteSingleRoom = true } = {}) {
+  if (!session || session.transferAborted || session.transferComplete) return false;
+  if (origin === "local" && confirmStop && !window.confirm(
+    t("transfer.stopConfirm", "确定终止本次传输吗？对方会收到通知，未完成的文件将被丢弃。")
+  )) return false;
+
+  session.transferAborted = true;
+  session.sending = false;
+  updateSenderSession(session, {
+    status: "stopped",
+    detail: origin === "local" ? t("transfer.stoppedByYou", "你已终止传输") : t("transfer.stoppedByPeer", "对方已终止传输"),
+    subdetail: t("transfer.stoppedDetail", "未完成的文件已丢弃。"),
+    percent: session.percent
+  });
+  if (!state.multiRecipient) {
+    setTransferActions("sender", false);
+    renderTransferStopped(origin);
+    notifyTaskParent("stopped");
+  }
+
+  if (origin === "local" && session.channel?.readyState === "open") {
+    try {
+      await sendSecureTo(session.channel, "terminate", { reason: "user" });
+      await waitForTerminationNotice(session.channel);
+    } catch (_) {
+      // The sender still stops this recipient if the channel closes simultaneously.
+    }
+  } else if (origin === "local") {
+    await postSignal("terminate", { reason: "user" }, session.receiverId).catch(() => {});
+  }
+  clearTimeout(session.disconnectTimer);
+  session.channel?.close();
+  session.peer?.close();
+  if (!senderSessionsNeedingRelayMonitor().length) stopRelayMonitoring();
+  if (!senderHasActiveTransfer(session)) await releaseTransferWakeLock();
+  if (!state.multiRecipient && deleteSingleRoom) {
+    stopPolling();
+    stopRelayMonitoring();
+    stopExpiryCountdown();
+    await deleteRoom().catch(() => {});
+  }
+  return true;
+}
+
+async function terminateAllSenderSessions({ confirmStop = true } = {}) {
+  const sessions = [...state.senderSessions.values()].filter(session => !session.transferAborted && !session.transferComplete);
+  if (confirmStop && sessions.length && !window.confirm(
+    t("multi.stopAllConfirm", "确定终止所有接收设备吗？未完成的文件将被丢弃，取件入口也会失效。")
+  )) return false;
+  await Promise.all(sessions.map(session => terminateSenderSession(session, "local", { confirmStop: false, deleteSingleRoom: false })));
+  for (const session of state.senderSessions.values()) {
+    session.channel?.close();
+    session.peer?.close();
+  }
+  stopPolling();
+  stopRelayMonitoring();
+  stopExpiryCountdown();
+  await releaseTransferWakeLock();
+  await deleteRoom().catch(() => {});
+  notifyTaskParent("stopped");
+  return true;
+}
+
 async function waitForTerminationNotice(channel, timeoutMs = 5000) {
   const deadline = performance.now() + timeoutMs;
   while (channel?.readyState === "open" && channel.bufferedAmount > 0 && performance.now() < deadline) {
@@ -753,6 +1015,10 @@ async function waitForTerminationNotice(channel, timeoutMs = 5000) {
 }
 
 async function terminateTransfer(origin = "local", { confirmStop = true } = {}) {
+  if (state.role === "sender") {
+    const session = [...state.senderSessions.values()].find(item => !item.transferAborted && !item.transferComplete);
+    return terminateSenderSession(session, origin, { confirmStop });
+  }
   if (state.transferAborted || state.transferComplete) return false;
   if (origin === "local" && confirmStop && !window.confirm(
     t("transfer.stopConfirm", "确定终止本次传输吗？对方会收到通知，未完成的文件将被丢弃。")
@@ -793,17 +1059,18 @@ async function handleStopTransfer(event) {
   if (!stopped) button.disabled = false;
 }
 
-function wireSenderChannel(channel) {
-  state.channel = channel;
+function wireSenderChannel(session, channel) {
+  session.channel = channel;
+  if (!state.multiRecipient) state.channel = channel;
   channel.binaryType = "arraybuffer";
   channel.bufferedAmountLowThreshold = 512 * 1024;
   channel.addEventListener("open", async () => {
     try {
-      state.chunkSize = selectChunkSize(state.peer?.sctp?.maxMessageSize);
-      if (state.receiverNeedsKey) {
+      session.chunkSize = selectChunkSize(session.peer?.sctp?.maxMessageSize);
+      if (session.receiverNeedsKey) {
         channel.send(JSON.stringify({ bootstrap: 1, key: state.transferKeyValue }));
       }
-      await sendSecure("manifest", {
+      await sendSecureTo(channel, "manifest", {
         files: state.files.map((file, index) => ({
           index,
           name: safeFilename(file.name),
@@ -811,56 +1078,73 @@ function wireSenderChannel(channel) {
           mime: file.type || "application/octet-stream"
         })),
         totalSize: totalSize(state.files),
-        chunkSize: state.chunkSize
+        chunkSize: session.chunkSize
       });
     } catch (error) {
-      showConnectionError(error);
+      showSenderSessionError(session, error);
     }
   });
   channel.addEventListener("message", event => {
     if (typeof event.data !== "string") return;
     decryptSecure(event.data).then(message => {
-      if (message.type === "terminate") return terminateTransfer("remote", { confirmStop: false });
-      if (message.type === "accept" && !state.sending && !state.transferAborted) return sendFiles();
+      if (message.type === "terminate") return terminateSenderSession(session, "remote", { confirmStop: false });
+      if (message.type === "accept" && !session.sending && !session.transferAborted) return sendFiles(session);
       if (message.type === "file-received") {
         const index = message.payload?.index;
-        if (Number.isInteger(index) && message.payload?.sha256 === state.sentHashes.get(index)) state.receivedAcks.add(index);
-        if (state.receivedAcks.size === state.files.length) {
-          state.sending = false;
-          state.transferComplete = true;
-          setTransferActions("sender", false);
-          releaseTransferWakeLock();
-          $("#sender-orb").classList.add("complete");
-          $("#sender-kicker").textContent = t("sender.receivedKicker", "对方已完整接收");
-          $("#sender-status").textContent = t("sender.filesVerified", `${state.files.length} 个文件均已校验`, { count: state.files.length });
-          $("#sender-detail").textContent = t("sender.waitSave", "等待对方逐个点击保存，请暂时保持页面打开");
-          notifyTaskParent("received");
+        if (Number.isInteger(index) && message.payload?.sha256 === session.sentHashes.get(index)) session.receivedAcks.add(index);
+        if (session.receivedAcks.size === state.files.length) {
+          session.sending = false;
+          session.transferComplete = true;
+          updateSenderSession(session, {
+            status: "received",
+            detail: t("sender.filesVerified", `${state.files.length} 个文件均已校验`, { count: state.files.length }),
+            subdetail: t("sender.waitSave", "等待对方逐个点击保存，请暂时保持页面打开"),
+            percent: 100
+          });
+          if (!state.multiRecipient) {
+            setTransferActions("sender", false);
+            $("#sender-orb").classList.add("complete");
+          }
+          if (!senderHasActiveTransfer(session)) releaseTransferWakeLock();
+          if (!senderSessionsNeedingRelayMonitor().length) stopRelayMonitoring();
+          if (!state.multiRecipient || allSenderSessionsReceived()) notifyTaskParent("received");
         }
       }
       if (message.type === "save-clicked") {
         const index = message.payload?.index;
-        if (Number.isInteger(index) && index >= 0 && index < state.files.length) state.savedAcks.add(index);
-        $("#sender-kicker").textContent = t("sender.savedCount", `对方已点击保存 ${state.savedAcks.size} / ${state.files.length}`, { saved: state.savedAcks.size, total: state.files.length });
-        if (state.savedAcks.size === state.files.length) {
-          $("#sender-status").textContent = t("sender.canClose", "现在可以关闭页面");
-          $("#sender-detail").textContent = t("sender.saveCaveat", "系统无法读取对方磁盘状态；这里只确认每个保存按钮均已点击");
-          notifyTaskParent("complete");
-          deleteRoom().catch(() => {});
+        if (Number.isInteger(index) && index >= 0 && index < state.files.length) session.savedAcks.add(index);
+        updateSenderSession(session, {
+          detail: t("sender.savedCount", `对方已点击保存 ${session.savedAcks.size} / ${state.files.length}`, { saved: session.savedAcks.size, total: state.files.length })
+        });
+        if (session.savedAcks.size === state.files.length) {
+          updateSenderSession(session, {
+            status: "complete",
+            detail: t("sender.canClose", "现在可以关闭页面"),
+            subdetail: t("sender.saveCaveat", "系统无法读取对方磁盘状态；这里只确认每个保存按钮均已点击")
+          });
+          if (!state.multiRecipient || allSenderSessionsFinished()) notifyTaskParent("complete");
+          if (!state.multiRecipient) deleteRoom().catch(() => {});
         }
       }
     }).catch(error => {
-      if (!state.transferAborted && !isTransferAbortError(error)) showConnectionError(error);
+      if (!session.transferAborted && !isTransferAbortError(error)) showSenderSessionError(session, error);
     });
   });
 }
 
-async function waitForBuffer(channel) {
-  assertTransferActive();
+function assertSenderSessionActive(session) {
+  if (session.transferAborted) throw transferAbortError();
+}
+
+async function waitForBuffer(channel, session = null) {
+  if (session) assertSenderSessionActive(session);
+  else assertTransferActive();
   try {
     await waitForWritableBuffer(channel);
-    assertTransferActive();
+    if (session) assertSenderSessionActive(session);
+    else assertTransferActive();
   } catch (error) {
-    if (state.transferAborted || isTransferAbortError(error)) throw transferAbortError();
+    if (session?.transferAborted || (!session && state.transferAborted) || isTransferAbortError(error)) throw transferAbortError();
     if (error?.code === "channel_closed" || error?.message === "channel_closed") {
       throw new Error(t("error.channelClosed", "传输期间连接已关闭。"));
     }
@@ -872,90 +1156,95 @@ function formatRate(bytesPerSecond) {
   return `${formatBytes(bytesPerSecond)}/s`;
 }
 
-async function sendFiles() {
-  state.transferAborted = false;
-  state.transferComplete = false;
-  state.sending = true;
-  setTransferActions("sender", true);
-  state.sendRateTracker = createRateTracker(performance.now(), 0);
+async function sendFiles(session) {
+  session.transferAborted = false;
+  session.transferComplete = false;
+  session.sending = true;
+  session.sentHashes.clear();
+  session.receivedAcks.clear();
+  session.savedAcks.clear();
+  if (!state.multiRecipient) setTransferActions("sender", true);
+  session.sendRateTracker = createRateTracker(performance.now(), 0);
   try {
     await acquireTransferWakeLock();
-    assertTransferActive();
+    assertSenderSessionActive(session);
     const batchSize = totalSize(state.files);
     let batchOffset = 0;
-    $("#sender-kicker").textContent = t("sender.transferring", "正在加密传输");
-    $("#sender-detail").textContent = t("sender.transferDetail", `${state.files.length} 个文件 · ${formatBytes(batchSize)} · 请保持页面打开`, { count: state.files.length, size: formatBytes(batchSize) });
+    updateSenderSession(session, {
+      status: "transferring",
+      detail: t("sender.transferDetail", `${state.files.length} 个文件 · ${formatBytes(batchSize)} · 请保持页面打开`, { count: state.files.length, size: formatBytes(batchSize) }),
+      subdetail: t("transfer.keepOpen", "传输期间，请勿关闭窗口"),
+      percent: 0
+    });
     notifyTaskParent("transferring", { percent: 0 });
     for (let fileIndex = 0; fileIndex < state.files.length; fileIndex += 1) {
-      assertTransferActive();
+      assertSenderSessionActive(session);
       const file = state.files[fileIndex];
       const noncePrefix = crypto.getRandomValues(new Uint8Array(4));
       const hasher = new Sha256();
       let offset = 0;
       let chunkIndex = 0;
-      $("#sender-status").textContent = `${fileIndex + 1} / ${state.files.length} · ${safeFilename(file.name)}`;
-      await sendSecure("file-start", {
+      updateSenderSession(session, { detail: `${fileIndex + 1} / ${state.files.length} · ${safeFilename(file.name)}` });
+      await sendSecureTo(session.channel, "file-start", {
         index: fileIndex,
         name: safeFilename(file.name),
         size: file.size,
         mime: file.type || "application/octet-stream",
-        chunkSize: state.chunkSize,
+        chunkSize: session.chunkSize,
         noncePrefix: base64UrlEncode(noncePrefix)
       });
       while (offset < file.size) {
-        assertTransferActive();
-        if (state.channel.readyState !== "open") throw new Error(t("error.channelClosed", "连接已经关闭。"));
-        await waitForBuffer(state.channel);
-        const plain = new Uint8Array(await file.slice(offset, offset + state.chunkSize).arrayBuffer());
-        assertTransferActive();
+        assertSenderSessionActive(session);
+        if (session.channel.readyState !== "open") throw new Error(t("error.channelClosed", "连接已经关闭。"));
+        await waitForBuffer(session.channel, session);
+        const plain = new Uint8Array(await file.slice(offset, offset + session.chunkSize).arrayBuffer());
+        assertSenderSessionActive(session);
         hasher.update(plain);
         const encrypted = await crypto.subtle.encrypt(
           { name: "AES-GCM", iv: chunkIv(noncePrefix, chunkIndex), additionalData: roomAdditionalData() },
           state.cryptoKey,
           plain
         );
-        assertTransferActive();
-        state.channel.send(encrypted);
+        assertSenderSessionActive(session);
+        session.channel.send(encrypted);
         offset += plain.byteLength;
         batchOffset += plain.byteLength;
         chunkIndex += 1;
-        const bytesPerSecond = sampleRate(state.sendRateTracker, batchOffset, performance.now());
+        const bytesPerSecond = sampleRate(session.sendRateTracker, batchOffset, performance.now());
         if (bytesPerSecond !== null) {
-          $("#sender-detail").textContent = t(
-            "sender.transferLive",
-            `${state.files.length} 个文件 · ${formatBytes(batchSize)} · ${formatRate(bytesPerSecond)} · 请保持页面打开`,
-            {
+          updateSenderSession(session, {
+            detail: t("sender.transferLive", `${state.files.length} 个文件 · ${formatBytes(batchSize)} · ${formatRate(bytesPerSecond)} · 请保持页面打开`, {
               count: state.files.length,
               size: formatBytes(batchSize),
               speed: formatRate(bytesPerSecond)
-            }
-          );
+            })
+          });
         }
         const percent = batchSize ? Math.min(100, Math.round((batchOffset / batchSize) * 100)) : 100;
-        $("#sender-progress").style.width = `${percent}%`;
-        $("#sender-percent").textContent = `${percent}%`;
-        if (percent === 100 || percent >= state.lastTaskProgress + 2) {
-          state.lastTaskProgress = percent;
+        updateSenderSession(session, { percent });
+        if (percent === 100 || percent >= session.lastTaskProgress + 2) {
+          session.lastTaskProgress = percent;
           notifyTaskParent("transferring", { percent });
         }
       }
       const hash = hasher.hex();
-      state.sentHashes.set(fileIndex, hash);
-      await waitForBuffer(state.channel);
-      assertTransferActive();
-      await sendSecure("file-end", { index: fileIndex, size: file.size, chunks: chunkIndex, sha256: hash });
+      session.sentHashes.set(fileIndex, hash);
+      await waitForBuffer(session.channel, session);
+      assertSenderSessionActive(session);
+      await sendSecureTo(session.channel, "file-end", { index: fileIndex, size: file.size, chunks: chunkIndex, sha256: hash });
     }
-    assertTransferActive();
-    $("#sender-progress").style.width = "100%";
-    $("#sender-percent").textContent = "100%";
-    $("#sender-kicker").textContent = t("sender.sentVerifying", "全部发送完毕，正在校验");
-    $("#sender-status").textContent = t("sender.waitVerification", `等待确认 ${state.files.length} 个文件`, { count: state.files.length });
-    $("#sender-detail").textContent = t("sender.hashDetail", "每个文件都通过 SHA-256 校验后，才会显示传输成功");
+    assertSenderSessionActive(session);
+    updateSenderSession(session, {
+      status: "transferring",
+      detail: t("sender.waitVerification", `等待确认 ${state.files.length} 个文件`, { count: state.files.length }),
+      subdetail: t("sender.hashDetail", "每个文件都通过 SHA-256 校验后，才会显示传输成功"),
+      percent: 100
+    });
   } catch (error) {
-    state.sending = false;
-    if (state.transferAborted || isTransferAbortError(error)) return;
-    setTransferActions("sender", false);
-    showConnectionError(error);
+    session.sending = false;
+    if (session.transferAborted || isTransferAbortError(error)) return;
+    if (!state.multiRecipient) setTransferActions("sender", false);
+    showSenderSessionError(session, error);
   }
 }
 
@@ -977,13 +1266,23 @@ async function createRoom() {
     state.transferKeyValue = base64UrlEncode(keyBytes);
     state.cryptoKey = await crypto.subtle.importKey("raw", keyBytes, "AES-GCM", false, ["encrypt", "decrypt"]);
     state.verificationRequired = $("#verification-required").checked;
+    state.multiRecipient = $("#multi-recipient").checked;
     const room = await api("/api/rooms", {
       method: "POST",
-      body: JSON.stringify({ pickupCodeHash, verificationRequired: state.verificationRequired })
+      body: JSON.stringify({
+        pickupCodeHash,
+        verificationRequired: state.verificationRequired,
+        multiRecipient: state.multiRecipient
+      })
     });
     state.role = "sender";
     state.roomId = room.roomId;
     state.authToken = room.senderToken;
+    state.multiRecipient = room.multiRecipient === true;
+    state.maxReceivers = room.maxReceivers || 1;
+    $("#sender-status-card").classList.toggle("hidden", state.multiRecipient);
+    $("#multi-status-card").classList.toggle("hidden", !state.multiRecipient);
+    $("#multi-session-count").textContent = `0 / ${state.maxReceivers}`;
     const receiverUrl = `${withLanguage(room.receiverBaseUrl)}#invite=${encodeURIComponent(room.inviteToken)}&key=${encodeURIComponent(state.transferKeyValue)}`;
     $("#receiver-link").textContent = receiverUrl;
     $("#pickup-url").textContent = withLanguage(room.pickupUrl);
@@ -1007,21 +1306,32 @@ async function createRoom() {
 }
 
 async function handleSenderSignal(message) {
+  const receiverId = message.receiverId || message.data?.receiverId;
   if (message.type === "join") {
-    state.receiverNeedsKey = message.data.pickup === true;
-    state.pairingCode = message.data.code;
+    if (!receiverId) return;
+    const session = createSenderSession(receiverId, message.data);
+    session.status = "opened";
+    updateSenderSession(session);
+    state.receiverNeedsKey = session.receiverNeedsKey;
+    state.pairingCode = session.pairingCode;
     $("#sender-kicker").textContent = t("sender.openedKicker", "有设备打开了链接");
     $("#sender-pairing").classList.add("hidden");
     $("#sender-status").textContent = t("sender.waitConfirmation", "等待对方确认收到");
     $("#sender-detail").textContent = t("sender.timerAfterConfirm", "对方点击确认后，20 分钟倒计时才开始");
     notifyTaskParent("opened");
   } else if (message.type === "confirmed") {
+    const session = state.senderSessions.get(receiverId);
+    if (!session || session.transferAborted) return;
+    session.confirmed = true;
+    session.status = state.verificationRequired ? "verification" : "connecting";
+    session.expiresAt = message.data.expiresAt;
+    updateSenderSession(session);
     state.receiptConfirmed = true;
     startExpiryCountdown(message.data.expiresAt);
     notifyTaskParent("confirmed");
     $("#sender-kicker").textContent = t("sender.confirmedKicker", "对方已确认收到");
     if (state.verificationRequired) {
-      $("#sender-pair-code").textContent = formatCode(state.pairingCode);
+      $("#sender-pair-code").textContent = formatCode(session.pairingCode);
       $("#sender-pairing").classList.remove("hidden");
       $("#sender-status").textContent = t("sender.checkCode", "请核对验证码");
       $("#sender-detail").textContent = t("sender.checkCodeDetail", "验证码一致后允许连接；倒计时已经开始");
@@ -1029,34 +1339,48 @@ async function handleSenderSignal(message) {
       $("#sender-pairing").classList.add("hidden");
       $("#sender-status").textContent = t("sender.autoConnecting", "正在自动建立连接");
       $("#sender-detail").textContent = t("sender.noExtraCode", "本次传输未启用额外验证码");
-      await approveReceiver();
+      await approveReceiver(receiverId);
     }
   } else if (message.type === "answer") {
-    await state.peer?.setRemoteDescription(message.data);
-    await flushCandidates();
+    const session = state.senderSessions.get(receiverId);
+    if (!session?.peer || session.transferAborted) return;
+    await session.peer.setRemoteDescription(message.data);
+    await flushCandidates(session);
   } else if (message.type === "candidate") {
-    await addCandidate(message.data);
+    const session = state.senderSessions.get(receiverId);
+    if (session && !session.transferAborted) await addCandidate(message.data, session);
+  } else if (message.type === "terminate") {
+    const session = state.senderSessions.get(receiverId);
+    if (session) await terminateSenderSession(session, "remote", { confirmStop: false });
   }
 }
 
-async function approveReceiver() {
+async function approveReceiver(receiverId = null) {
+  const session = receiverId
+    ? state.senderSessions.get(receiverId)
+    : [...state.senderSessions.values()].find(item => item.status === "verification" && !item.approved);
+  if (!session || session.approved || session.transferAborted) return;
   const button = $("#approve-receiver");
   button.disabled = true;
   try {
-    const peer = await makePeer("sender");
+    session.approved = true;
+    session.status = "connecting";
+    updateSenderSession(session);
+    const peer = await makePeer("sender", session);
     const channel = peer.createDataChannel("relay-file", { ordered: true });
-    wireSenderChannel(channel);
-    await postSignal("approved", null);
+    wireSenderChannel(session, channel);
+    await postSignal("approved", null, session.receiverId);
     const offer = await peer.createOffer();
     await peer.setLocalDescription(offer);
-    await postSignal("offer", peer.localDescription.toJSON());
+    await postSignal("offer", peer.localDescription.toJSON(), session.receiverId);
     $("#sender-pairing").classList.add("hidden");
     $("#sender-kicker").textContent = t("sender.secureConnecting", "正在建立加密连接");
     $("#sender-status").textContent = t("common.wait", "请稍候");
     notifyTaskParent("connecting");
   } catch (error) {
+    session.approved = false;
     button.disabled = false;
-    showConnectionError(error);
+    showSenderSessionError(session, error);
   }
 }
 
@@ -1333,20 +1657,25 @@ async function startReceiver(roomId, inviteToken, keyValue) {
       body: "{}"
     });
     state.authToken = claim.receiverToken;
+    state.receiverId = claim.receiverId;
     state.verificationRequired = claim.verificationRequired === true;
+    state.multiRecipient = claim.multiRecipient === true;
+    state.maxReceivers = claim.maxReceivers || 1;
     history.replaceState(null, "", `${location.pathname}?room=${encodeURIComponent(roomId)}&lang=${relayLanguage}`);
     state.pairingCode = claim.code;
     showReceiptConfirmation();
   } catch (error) {
     history.replaceState(null, "", `${location.pathname}?lang=${relayLanguage}`);
-    const message = error.message === "room_claimed"
+    const message = error.message === "room_full"
+      ? t("error.roomFull", "接收人数已满，请联系发送方。")
+      : error.message === "room_claimed"
       ? t("error.claimed", "这个一次性链接已被另一台设备使用。")
       : t("error.badLink", "链接无效、已过期或缺少安全密钥。");
     showConnectionError(new Error(message));
   }
 }
 
-async function startClaimedReceiver(roomId, receiverToken, code, verificationRequired) {
+async function startClaimedReceiver(roomId, receiverToken, receiverId, code, verificationRequired, multiRecipient, maxReceivers) {
   showView("#receiver-view");
   state.role = "receiver";
   state.roomId = roomId;
@@ -1354,7 +1683,10 @@ async function startClaimedReceiver(roomId, receiverToken, code, verificationReq
     if (!TOKEN_PATTERN_CLIENT.test(receiverToken) || !/^\d{6}$/.test(code || "")) throw new Error("invalid_pickup_session");
     state.cryptoKey = null;
     state.authToken = receiverToken;
+    state.receiverId = receiverId;
     state.verificationRequired = verificationRequired === true;
+    state.multiRecipient = multiRecipient === true;
+    state.maxReceivers = Number(maxReceivers) || 1;
     history.replaceState(null, "", `${location.pathname}?room=${encodeURIComponent(roomId)}&lang=${relayLanguage}`);
     state.pairingCode = code;
     showReceiptConfirmation();
@@ -1420,7 +1752,25 @@ async function handleReceiverSignal(message) {
     await postSignal("answer", peer.localDescription.toJSON());
   } else if (message.type === "candidate") {
     await addCandidate(message.data);
+  } else if (message.type === "terminate") {
+    await terminateTransfer("remote", { confirmStop: false });
   }
+}
+
+function showSenderSessionError(session, error) {
+  if (!session || session.transferAborted || session.transferComplete || isTransferAbortError(error)) return;
+  session.sending = false;
+  session.transferAborted = true;
+  clearTimeout(session.disconnectTimer);
+  session.channel?.close();
+  session.peer?.close();
+  updateSenderSession(session, {
+    status: "error",
+    detail: error?.message || t("error.connection", "连接出现问题。")
+  });
+  if (!senderHasActiveTransfer(session)) releaseTransferWakeLock();
+  if (!senderSessionsNeedingRelayMonitor().length) stopRelayMonitoring();
+  if (!state.multiRecipient) showConnectionError(error);
 }
 
 function showConnectionError(error) {
@@ -1434,6 +1784,14 @@ function showConnectionError(error) {
   const message = error?.message || t("error.connection", "连接出现问题。");
   if (!$("#receiver-view").classList.contains("hidden")) {
     $("#receiver-error").textContent = message;
+  } else if (state.multiRecipient) {
+    const activeSessions = [...state.senderSessions.values()].filter(session => !session.transferComplete && !session.transferAborted);
+    for (const session of activeSessions) updateSenderSession(session, { status: "error", detail: message });
+    if (!activeSessions.length) {
+      $("#multi-session-empty").textContent = message;
+      $("#multi-session-empty").classList.remove("hidden");
+    }
+    notifyTaskParent("error");
   } else {
     $("#sender-kicker").textContent = t("task.error", "连接遇到问题");
     $("#sender-status").textContent = message;
@@ -1493,6 +1851,7 @@ async function cancelRoom(confirmActive = true) {
   stopExpiryCountdown();
   await releaseTransferWakeLock();
   state.peer?.close();
+  for (const session of state.senderSessions.values()) session.peer?.close();
   await deleteRoom().catch(() => {});
   if (isEmbeddedSender) {
     window.parent.postMessage({ type: "relay:task-closed", taskId: embeddedTaskId }, window.location.origin);
@@ -1550,7 +1909,8 @@ function initSender() {
   $("#copy-pickup-code").addEventListener("click", copyPickupCode);
   $("#cancel-room").addEventListener("click", cancelRoom);
   $("#sender-stop-transfer").addEventListener("click", handleStopTransfer);
-  $("#approve-receiver").addEventListener("click", approveReceiver);
+  $("#approve-receiver").addEventListener("click", () => approveReceiver());
+  $("#multi-stop-all").addEventListener("click", () => terminateAllSenderSessions());
   notifyTaskParent("ready");
 }
 
@@ -1563,7 +1923,15 @@ const secrets = new URLSearchParams(window.location.hash.slice(1));
 const TOKEN_PATTERN_CLIENT = /^[A-Za-z0-9_-]{32,128}$/;
 if (roomId && secrets.get("invite") && secrets.get("key")) startReceiver(roomId, secrets.get("invite"), secrets.get("key"));
 else if (roomId && secrets.get("receiver") && secrets.get("code")) {
-  startClaimedReceiver(roomId, secrets.get("receiver"), secrets.get("code"), secrets.get("verify") === "1");
+  startClaimedReceiver(
+    roomId,
+    secrets.get("receiver"),
+    secrets.get("receiverId"),
+    secrets.get("code"),
+    secrets.get("verify") === "1",
+    secrets.get("multi") === "1",
+    secrets.get("max")
+  );
 }
 else if (roomId) {
   showView("#receiver-view");
@@ -1584,6 +1952,7 @@ window.addEventListener("pagehide", () => {
   state.wakeLockWanted = false;
   state.wakeLockSentinel?.release().catch(() => {});
   state.peer?.close();
+  for (const session of state.senderSessions.values()) session.peer?.close();
   state.objectUrls.forEach(objectUrl => URL.revokeObjectURL(objectUrl));
   state.receiveCleanups.forEach(cleanup => cleanup?.());
 });

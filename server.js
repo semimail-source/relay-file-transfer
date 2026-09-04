@@ -8,6 +8,7 @@ const PUBLIC_DIR = path.join(__dirname, "public");
 const DEFAULT_ROOM_TTL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_CONFIRMED_ROOM_TTL_MS = 20 * 60 * 1000;
 const MAX_SIGNAL_MESSAGES = 240;
+const MAX_RECEIVERS = 5;
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{32,128}$/;
 const PICKUP_HASH_PATTERN = /^[a-f0-9]{64}$/;
 const DEFAULT_TURN_LIMIT_GB = 800;
@@ -169,9 +170,10 @@ class MemoryRoomStore {
     if (this.rooms.has(meta.id) || (meta.pickupCodeHash && this.pickupRooms.has(meta.pickupCodeHash))) return false;
     this.rooms.set(meta.id, {
       meta,
-      receiverSessionHash: null,
+      receivers: new Map(),
+      confirmedReceivers: new Set(),
       nextMessageId: 1,
-      messages: { sender: [], receiver: [] }
+      messages: { sender: [] }
     });
     if (meta.pickupCodeHash) this.pickupRooms.set(meta.pickupCodeHash, meta.id);
     return true;
@@ -182,50 +184,63 @@ class MemoryRoomStore {
     return this.rooms.get(id)?.meta || null;
   }
 
-  async claim(id, inviteHash, receiverSessionHash) {
+  async claim(id, inviteHash, receiverId, receiverSessionHash) {
     this.clean();
     const room = this.rooms.get(id);
     if (!room) return { status: "not_found" };
     if (!safeHashEqual(room.meta.inviteTokenHash, inviteHash)) return { status: "unauthorized" };
-    if (room.receiverSessionHash) return { status: "claimed" };
-    room.receiverSessionHash = receiverSessionHash;
-    return { status: "ok", meta: room.meta };
+    const maxReceivers = room.meta.maxReceivers || 1;
+    if (room.receivers.size >= maxReceivers) return { status: maxReceivers > 1 ? "full" : "claimed" };
+    room.receivers.set(receiverId, receiverSessionHash);
+    room.messages[`receiver:${receiverId}`] = [];
+    return { status: "ok", meta: room.meta, receiverId };
   }
 
-  async claimPickup(pickupCodeHash, receiverSessionHash) {
+  async claimPickup(pickupCodeHash, receiverId, receiverSessionHash) {
     this.clean();
     const id = this.pickupRooms.get(pickupCodeHash);
     const room = id ? this.rooms.get(id) : null;
     if (!room || !safeHashEqual(room.meta.pickupCodeHash, pickupCodeHash)) return { status: "not_found" };
-    if (room.receiverSessionHash) return { status: "claimed" };
-    room.receiverSessionHash = receiverSessionHash;
-    return { status: "ok", meta: room.meta };
+    const maxReceivers = room.meta.maxReceivers || 1;
+    if (room.receivers.size >= maxReceivers) return { status: maxReceivers > 1 ? "full" : "claimed" };
+    room.receivers.set(receiverId, receiverSessionHash);
+    room.messages[`receiver:${receiverId}`] = [];
+    return { status: "ok", meta: room.meta, receiverId };
   }
 
   async authenticate(id, tokenHash) {
     this.clean();
     const room = this.rooms.get(id);
     if (!room) return null;
-    if (safeHashEqual(room.meta.senderTokenHash, tokenHash)) return { role: "sender", meta: room.meta };
-    if (room.receiverSessionHash && safeHashEqual(room.receiverSessionHash, tokenHash)) return { role: "receiver", meta: room.meta };
+    if (safeHashEqual(room.meta.senderTokenHash, tokenHash)) return { role: "sender", receiverId: null, meta: room.meta };
+    for (const [receiverId, receiverHash] of room.receivers) {
+      if (safeHashEqual(receiverHash, tokenHash)) return { role: "receiver", receiverId, meta: room.meta };
+    }
     return null;
   }
 
-  async hasReceiver(id) {
+  async hasReceiver(id, receiverId = null) {
     this.clean();
-    return Boolean(this.rooms.get(id)?.receiverSessionHash);
+    const receivers = this.rooms.get(id)?.receivers;
+    return receiverId ? Boolean(receivers?.has(receiverId)) : Boolean(receivers?.size);
   }
 
-  async confirm(id, confirmedAt, expiresAt) {
+  async receiverIds(id) {
+    this.clean();
+    return [...(this.rooms.get(id)?.receivers.keys() || [])];
+  }
+
+  async confirm(id, receiverId, confirmedAt, expiresAt) {
     this.clean();
     const room = this.rooms.get(id);
     if (!room) return { status: "not_found" };
-    if (!room.receiverSessionHash) return { status: "receiver_not_ready" };
-    const newlyConfirmed = !room.meta.confirmedAt;
+    if (!room.receivers.has(receiverId)) return { status: "receiver_not_ready" };
+    const newlyReceiverConfirmed = !room.confirmedReceivers.has(receiverId);
+    room.confirmedReceivers.add(receiverId);
     if (!room.meta.confirmedAt) {
       room.meta = { ...room.meta, confirmedAt, expiresAt };
     }
-    return { status: "ok", meta: room.meta, newlyConfirmed };
+    return { status: "ok", meta: room.meta, newlyReceiverConfirmed };
   }
 
   async addMessage(id, target, message) {
@@ -233,6 +248,7 @@ class MemoryRoomStore {
     const room = this.rooms.get(id);
     if (!room) return null;
     const stored = { ...message, id: room.nextMessageId++ };
+    if (!room.messages[target]) room.messages[target] = [];
     room.messages[target].push(stored);
     if (room.messages[target].length > MAX_SIGNAL_MESSAGES) room.messages[target].shift();
     return stored;
@@ -241,7 +257,7 @@ class MemoryRoomStore {
   async getMessages(id, target, after) {
     this.clean();
     const room = this.rooms.get(id);
-    return room ? room.messages[target].filter(message => message.id > after) : null;
+    return room ? (room.messages[target] || []).filter(message => message.id > after) : null;
   }
 
   async delete(id) {
@@ -323,54 +339,74 @@ class RedisRoomStore {
     return meta.expiresAt > Date.now() ? meta : null;
   }
 
-  async claim(id, inviteHash, receiverSessionHash) {
+  async claim(id, inviteHash, receiverId, receiverSessionHash) {
     const meta = await this.getMeta(id);
     if (!meta) return { status: "not_found" };
     if (!safeHashEqual(meta.inviteTokenHash, inviteHash)) return { status: "unauthorized" };
     const ttl = Math.max(1, Math.ceil((meta.expiresAt - Date.now()) / 1000));
-    const result = await this.command(["SET", `${this.base(id)}:receiver`, receiverSessionHash, "EX", ttl, "NX"]);
-    return result === "OK" ? { status: "ok", meta } : { status: "claimed" };
+    const result = Number(await this.command([
+      "EVAL",
+      "local count=redis.call('HLEN',KEYS[1]); if count>=tonumber(ARGV[3]) then return 0 end; if redis.call('HEXISTS',KEYS[1],ARGV[1])==1 then return 0 end; redis.call('HSET',KEYS[1],ARGV[1],ARGV[2]); redis.call('EXPIRE',KEYS[1],ARGV[4]); return 1",
+      1, `${this.base(id)}:receivers`, receiverId, receiverSessionHash, String(meta.maxReceivers || 1), String(ttl)
+    ]));
+    return result === 1 ? { status: "ok", meta, receiverId } : { status: (meta.maxReceivers || 1) > 1 ? "full" : "claimed" };
   }
 
-  async claimPickup(pickupCodeHash, receiverSessionHash) {
+  async claimPickup(pickupCodeHash, receiverId, receiverSessionHash) {
     const id = await this.command(["GET", this.pickupBase(pickupCodeHash)]);
     if (!id) return { status: "not_found" };
     const meta = await this.getMeta(id);
     if (!meta || !meta.pickupCodeHash || !safeHashEqual(meta.pickupCodeHash, pickupCodeHash)) return { status: "not_found" };
     const ttl = Math.max(1, Math.ceil((meta.expiresAt - Date.now()) / 1000));
-    const result = await this.command(["SET", `${this.base(id)}:receiver`, receiverSessionHash, "EX", ttl, "NX"]);
-    return result === "OK" ? { status: "ok", meta } : { status: "claimed" };
+    const result = Number(await this.command([
+      "EVAL",
+      "local count=redis.call('HLEN',KEYS[1]); if count>=tonumber(ARGV[3]) then return 0 end; if redis.call('HEXISTS',KEYS[1],ARGV[1])==1 then return 0 end; redis.call('HSET',KEYS[1],ARGV[1],ARGV[2]); redis.call('EXPIRE',KEYS[1],ARGV[4]); return 1",
+      1, `${this.base(id)}:receivers`, receiverId, receiverSessionHash, String(meta.maxReceivers || 1), String(ttl)
+    ]));
+    return result === 1 ? { status: "ok", meta, receiverId } : { status: (meta.maxReceivers || 1) > 1 ? "full" : "claimed" };
   }
 
   async authenticate(id, tokenHash) {
     const meta = await this.getMeta(id);
     if (!meta) return null;
-    if (safeHashEqual(meta.senderTokenHash, tokenHash)) return { role: "sender", meta };
-    const receiverHash = await this.command(["GET", `${this.base(id)}:receiver`]);
-    if (receiverHash && safeHashEqual(receiverHash, tokenHash)) return { role: "receiver", meta };
+    if (safeHashEqual(meta.senderTokenHash, tokenHash)) return { role: "sender", receiverId: null, meta };
+    const receiverEntries = await this.command(["HGETALL", `${this.base(id)}:receivers`]);
+    for (let index = 0; index < (receiverEntries || []).length; index += 2) {
+      if (safeHashEqual(receiverEntries[index + 1], tokenHash)) {
+        return { role: "receiver", receiverId: receiverEntries[index], meta };
+      }
+    }
     return null;
   }
 
-  async hasReceiver(id) {
-    return Boolean(await this.command(["GET", `${this.base(id)}:receiver`]));
+  async hasReceiver(id, receiverId = null) {
+    if (receiverId) return Number(await this.command(["HEXISTS", `${this.base(id)}:receivers`, receiverId])) === 1;
+    return Number(await this.command(["HLEN", `${this.base(id)}:receivers`])) > 0;
   }
 
-  async confirm(id, confirmedAt, expiresAt) {
+  async receiverIds(id) {
+    return await this.command(["HKEYS", `${this.base(id)}:receivers`]) || [];
+  }
+
+  async confirm(id, receiverId, confirmedAt, expiresAt) {
     const meta = await this.getMeta(id);
     if (!meta) return { status: "not_found" };
-    if (!await this.hasReceiver(id)) return { status: "receiver_not_ready" };
-    if (meta.confirmedAt) return { status: "ok", meta, newlyConfirmed: false };
+    if (!await this.hasReceiver(id, receiverId)) return { status: "receiver_not_ready" };
+    const newlyReceiverConfirmed = Number(await this.command(["HSETNX", `${this.base(id)}:confirmed`, receiverId, String(confirmedAt)])) === 1;
+    if (meta.confirmedAt) return { status: "ok", meta, newlyReceiverConfirmed };
     const updated = { ...meta, confirmedAt, expiresAt };
     const ttl = Math.max(1, Math.ceil((expiresAt - Date.now()) / 1000));
     const saved = await this.command(["SET", `${this.base(id)}:meta`, JSON.stringify(updated), "EX", ttl, "XX"]);
     if (saved !== "OK") return { status: "not_found" };
+    const receiverIds = await this.receiverIds(id);
     const expiringKeys = [
-      `${this.base(id)}:receiver`, `${this.base(id)}:seq`,
-      `${this.base(id)}:signals:sender`, `${this.base(id)}:signals:receiver`,
+      `${this.base(id)}:receivers`, `${this.base(id)}:confirmed`, `${this.base(id)}:seq`,
+      `${this.base(id)}:signals:sender`,
+      ...receiverIds.map(idValue => `${this.base(id)}:signals:receiver:${idValue}`),
       ...(meta.pickupCodeHash ? [this.pickupBase(meta.pickupCodeHash)] : [])
     ];
     for (const key of expiringKeys) await this.command(["EXPIRE", key, ttl]);
-    return { status: "ok", meta: updated, newlyConfirmed: true };
+    return { status: "ok", meta: updated, newlyReceiverConfirmed };
   }
 
   async addMessage(id, target, message) {
@@ -395,9 +431,11 @@ class RedisRoomStore {
 
   async delete(id) {
     const meta = await this.getMeta(id);
+    const receiverIds = await this.receiverIds(id);
     await this.command(["DEL",
-      `${this.base(id)}:meta`, `${this.base(id)}:receiver`, `${this.base(id)}:seq`,
-      `${this.base(id)}:signals:sender`, `${this.base(id)}:signals:receiver`,
+      `${this.base(id)}:meta`, `${this.base(id)}:receivers`, `${this.base(id)}:confirmed`, `${this.base(id)}:seq`,
+      `${this.base(id)}:signals:sender`,
+      ...receiverIds.map(receiverId => `${this.base(id)}:signals:receiver:${receiverId}`),
       ...(meta?.pickupCodeHash ? [this.pickupBase(meta.pickupCodeHash)] : [])
     ]);
   }
@@ -599,10 +637,12 @@ async function guardedIceConfiguration(store, overrides = {}) {
 
 function validSignal(role, type, data) {
   const allowed = role === "sender"
-    ? ["approved", "offer", "candidate"]
-    : ["answer", "candidate"];
+    ? ["approved", "offer", "candidate", "terminate"]
+    : ["answer", "candidate", "terminate"];
   if (!allowed.includes(type)) return false;
   if (type === "approved") return data === null || data === undefined;
+  if (type === "terminate") return data === null || data === undefined ||
+    (data && data.reason === "user" && Object.keys(data).length === 1);
   if (type === "offer" || type === "answer") {
     return data && data.type === type && typeof data.sdp === "string" && data.sdp.length <= 48 * 1024;
   }
@@ -716,6 +756,10 @@ function createHandler(options = {}) {
           json(req, res, 400, { error: "invalid_verification_setting" });
           return;
         }
+        if (body.multiRecipient !== undefined && typeof body.multiRecipient !== "boolean") {
+          json(req, res, 400, { error: "invalid_multi_recipient_setting" });
+          return;
+        }
         const id = randomToken(18);
         const senderToken = randomToken();
         const inviteToken = randomToken();
@@ -728,6 +772,8 @@ function createHandler(options = {}) {
           senderTokenHash: hashToken(senderToken),
           inviteTokenHash: hashToken(inviteToken),
           verificationRequired: body.verificationRequired === true,
+          multiRecipient: body.multiRecipient === true,
+          maxReceivers: body.multiRecipient === true ? MAX_RECEIVERS : 1,
           ...(pickupCodeHash ? { pickupCodeHash } : {})
         };
         if (!await store.create(meta)) {
@@ -741,6 +787,8 @@ function createHandler(options = {}) {
           receiverBaseUrl: `${requestOrigin(req, port)}/?room=${encodeURIComponent(id)}`,
           pickupUrl: `${requestOrigin(req, port)}/pickup`,
           verificationRequired: meta.verificationRequired,
+          multiRecipient: meta.multiRecipient,
+          maxReceivers: meta.maxReceivers,
           expiresAt: new Date(meta.expiresAt).toISOString()
         });
         return;
@@ -757,20 +805,26 @@ function createHandler(options = {}) {
           return;
         }
         const receiverToken = randomToken();
-        const result = await store.claimPickup(body.pickupCodeHash, hashToken(receiverToken));
+        const receiverId = randomToken(9);
+        const result = await store.claimPickup(body.pickupCodeHash, receiverId, hashToken(receiverToken));
         if (result.status === "not_found") json(req, res, 404, { error: "pickup_not_found" });
         else if (result.status === "claimed") json(req, res, 409, { error: "room_claimed" });
+        else if (result.status === "full") json(req, res, 409, { error: "room_full" });
         else {
           await store.addMessage(result.meta.id, "sender", {
             from: "system",
             type: "join",
-            data: { code: result.meta.code, pickup: true }
+            receiverId,
+            data: { code: result.meta.code, pickup: true, receiverId }
           });
           json(req, res, 201, {
             roomId: result.meta.id,
             receiverToken,
+            receiverId,
             code: result.meta.code,
             verificationRequired: result.meta.verificationRequired === true,
+            multiRecipient: result.meta.multiRecipient === true,
+            maxReceivers: result.meta.maxReceivers || 1,
             expiresAt: new Date(result.meta.expiresAt).toISOString()
           });
         }
@@ -789,20 +843,26 @@ function createHandler(options = {}) {
           return;
         }
         const receiverToken = randomToken();
-        const result = await store.claim(claimMatch[1], hashToken(inviteToken), hashToken(receiverToken));
+        const receiverId = randomToken(9);
+        const result = await store.claim(claimMatch[1], hashToken(inviteToken), receiverId, hashToken(receiverToken));
         if (result.status === "not_found") json(req, res, 404, { error: "room_not_found" });
         else if (result.status === "unauthorized") json(req, res, 401, { error: "unauthorized" });
         else if (result.status === "claimed") json(req, res, 409, { error: "room_claimed" });
+        else if (result.status === "full") json(req, res, 409, { error: "room_full" });
         else {
           await store.addMessage(claimMatch[1], "sender", {
             from: "system",
             type: "join",
-            data: { code: result.meta.code, pickup: false }
+            receiverId,
+            data: { code: result.meta.code, pickup: false, receiverId }
           });
           json(req, res, 201, {
             receiverToken,
+            receiverId,
             code: result.meta.code,
             verificationRequired: result.meta.verificationRequired === true,
+            multiRecipient: result.meta.multiRecipient === true,
+            maxReceivers: result.meta.maxReceivers || 1,
             expiresAt: new Date(result.meta.expiresAt).toISOString()
           });
         }
@@ -834,16 +894,17 @@ function createHandler(options = {}) {
           return;
         }
         const confirmedAt = Date.now();
-        const result = await store.confirm(confirmMatch[1], confirmedAt, confirmedAt + confirmedRoomTtlMs);
+        const result = await store.confirm(confirmMatch[1], auth.receiverId, confirmedAt, confirmedAt + confirmedRoomTtlMs);
         if (result.status !== "ok") {
           json(req, res, result.status === "not_found" ? 404 : 409, { error: result.status });
           return;
         }
-        if (result.newlyConfirmed) {
+        if (result.newlyReceiverConfirmed) {
           await store.addMessage(confirmMatch[1], "sender", {
             from: "system",
             type: "confirmed",
-            data: { expiresAt: new Date(result.meta.expiresAt).toISOString() }
+            receiverId: auth.receiverId,
+            data: { receiverId: auth.receiverId, expiresAt: new Date(result.meta.expiresAt).toISOString() }
           });
         }
         json(req, res, 200, {
@@ -888,18 +949,24 @@ function createHandler(options = {}) {
         }
 
         if (req.method === "POST") {
-          if (auth.role === "sender" && !await store.hasReceiver(signalMatch[1])) {
+          const body = await readJson(req);
+          let receiverId = auth.role === "receiver" ? auth.receiverId : body.receiverId;
+          if (auth.role === "sender" && !receiverId) {
+            const receiverIds = await store.receiverIds(signalMatch[1]);
+            if (receiverIds.length === 1) receiverId = receiverIds[0];
+          }
+          if (auth.role === "sender" && (!receiverId || !await store.hasReceiver(signalMatch[1], receiverId))) {
             json(req, res, 409, { error: "receiver_not_ready" });
             return;
           }
-          const body = await readJson(req);
           if (!validSignal(auth.role, body.type, body.data)) {
             json(req, res, 400, { error: "invalid_signal" });
             return;
           }
-          const target = auth.role === "sender" ? "receiver" : "sender";
+          const target = auth.role === "sender" ? `receiver:${receiverId}` : "sender";
           const stored = await store.addMessage(signalMatch[1], target, {
             from: auth.role,
+            receiverId,
             type: body.type,
             data: body.data ?? null
           });
@@ -914,7 +981,8 @@ function createHandler(options = {}) {
             json(req, res, 400, { error: "invalid_query" });
             return;
           }
-          const messages = await store.getMessages(signalMatch[1], auth.role, after);
+          const target = auth.role === "receiver" ? `receiver:${auth.receiverId}` : "sender";
+          const messages = await store.getMessages(signalMatch[1], target, after);
           if (!messages) json(req, res, 404, { error: "room_not_found" });
           else json(req, res, 200, { messages });
           return;
