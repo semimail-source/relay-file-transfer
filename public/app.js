@@ -12,7 +12,12 @@ const {
   normalizeCode: normalizePickupCode,
   normalizeName: normalizePickupName
 } = window.RelayPickup;
-const CHUNK_SIZE = 64 * 1024;
+const {
+  AES_GCM_TAG_BYTES,
+  SAFE_CHUNK_SIZE,
+  isValidChunkSize,
+  selectChunkSize
+} = window.RelayChunking;
 const MAX_FILES = 100;
 const MAX_SENDER_TASKS = 6;
 const DANGEROUS_EXTENSIONS = /\.(?:exe|msi|bat|cmd|com|scr|ps1|vbs|jar|app|pkg|dmg|sh)$/i;
@@ -60,7 +65,8 @@ const state = {
   lastTaskProgress: -1,
   wakeLockWanted: false,
   wakeLockSentinel: null,
-  wakeLockRequest: null
+  wakeLockRequest: null,
+  chunkSize: SAFE_CHUNK_SIZE
 };
 
 const taskHubState = {
@@ -607,6 +613,7 @@ function wireSenderChannel(channel) {
   channel.bufferedAmountLowThreshold = 512 * 1024;
   channel.addEventListener("open", async () => {
     try {
+      state.chunkSize = selectChunkSize(state.peer?.sctp?.maxMessageSize);
       if (state.receiverNeedsKey) {
         channel.send(JSON.stringify({ bootstrap: 1, key: state.transferKeyValue }));
       }
@@ -618,7 +625,7 @@ function wireSenderChannel(channel) {
           mime: file.type || "application/octet-stream"
         })),
         totalSize: totalSize(state.files),
-        chunkSize: CHUNK_SIZE
+        chunkSize: state.chunkSize
       });
     } catch (error) {
       showConnectionError(error);
@@ -684,13 +691,13 @@ async function sendFiles() {
       name: safeFilename(file.name),
       size: file.size,
       mime: file.type || "application/octet-stream",
-      chunkSize: CHUNK_SIZE,
+      chunkSize: state.chunkSize,
       noncePrefix: base64UrlEncode(noncePrefix)
     });
     while (offset < file.size) {
       if (state.channel.readyState !== "open") throw new Error(t("error.channelClosed", "连接已经关闭。"));
       await waitForBuffer(state.channel);
-      const plain = new Uint8Array(await file.slice(offset, offset + CHUNK_SIZE).arrayBuffer());
+      const plain = new Uint8Array(await file.slice(offset, offset + state.chunkSize).arrayBuffer());
       hasher.update(plain);
       const encrypted = await crypto.subtle.encrypt(
         { name: "AES-GCM", iv: chunkIv(noncePrefix, chunkIndex), additionalData: roomAdditionalData() },
@@ -893,13 +900,13 @@ function validManifestFile(file, index) {
 
 function showIncomingFiles(manifest) {
   if (!manifest || !Array.isArray(manifest.files) || manifest.files.length < 1 || manifest.files.length > MAX_FILES ||
-      manifest.chunkSize !== CHUNK_SIZE || !manifest.files.every(validManifestFile)) {
+      !isValidChunkSize(manifest.chunkSize) || !manifest.files.every(validManifestFile)) {
     throw new Error(t("error.manifest", "收到的文件清单无效。"));
   }
   const files = manifest.files.map(file => ({ ...file, name: safeFilename(file.name) }));
   const calculatedSize = files.reduce((sum, file) => sum + file.size, 0);
   if (!Number.isSafeInteger(calculatedSize) || calculatedSize !== manifest.totalSize) throw new Error(t("error.manifestSize", "文件清单大小不一致。"));
-  state.manifest = { files, totalSize: calculatedSize };
+  state.manifest = { files, totalSize: calculatedSize, chunkSize: manifest.chunkSize };
   $("#receiver-kicker").textContent = t("receiver.incomingKicker", `发送方想给你 ${files.length} 个文件`, { count: files.length });
   $("#receiver-title").innerHTML = t("receiver.incomingTitle", "检查待接收文件");
   $("#receiver-message").textContent = t("receiver.review", "确认名称、数量和总大小后再接收。Relay 不会自动打开文件。");
@@ -939,7 +946,7 @@ async function acceptFile() {
 
 async function startIncomingFile(metadata) {
   if (!state.accepted || !state.manifest || !metadata || !Number.isInteger(metadata.index) || metadata.index !== state.currentFileIndex + 1 ||
-      metadata.chunkSize !== CHUNK_SIZE || !validManifestFile(metadata, metadata.index)) {
+      !isValidChunkSize(metadata.chunkSize) || metadata.chunkSize !== state.manifest.chunkSize || !validManifestFile(metadata, metadata.index)) {
     throw new Error(t("error.fileInfo", "收到的文件信息无效。"));
   }
   const listed = state.manifest.files[metadata.index];
@@ -962,12 +969,19 @@ async function startIncomingFile(metadata) {
 
 async function receiveEncryptedChunk(value) {
   if (!state.sink || !state.metadata) throw new Error(t("error.notAccepted", "文件尚未获得接收许可。"));
+  const encryptedSize = value instanceof Blob ? value.size : value?.byteLength;
+  if (!Number.isSafeInteger(encryptedSize) || encryptedSize > state.metadata.chunkSize + AES_GCM_TAG_BYTES) {
+    throw new Error(t("error.chunkSize", "收到的文件分片超过协商大小。"));
+  }
   const encrypted = value instanceof Blob ? await value.arrayBuffer() : value;
   const plain = new Uint8Array(await crypto.subtle.decrypt(
     { name: "AES-GCM", iv: chunkIv(state.noncePrefix, state.receivedChunks), additionalData: roomAdditionalData() },
     state.cryptoKey,
     encrypted
   ));
+  if (plain.byteLength > state.metadata.chunkSize || state.receivedBytes + plain.byteLength > state.metadata.size) {
+    throw new Error(t("error.chunkSize", "收到的文件分片超过协商大小。"));
+  }
   state.receiveHasher.update(plain);
   await state.sink.write(plain);
   state.receivedBytes += plain.byteLength;
