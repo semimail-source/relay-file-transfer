@@ -375,6 +375,11 @@ h1 em { color: var(--green); font-family: inherit; font-style: normal; font-weig
 .receiver-progress-label { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
 .progress-track.large { height: 8px; margin-top: 10px; }
 .receiver-progress-wrap > small { display: block; margin-top: 8px; color: var(--muted); font-size: 10px; }
+.transfer-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+.transfer-warning { color: var(--muted); font-size: 10px; line-height: 1.5; }
+.stop-transfer-button { flex: 0 0 auto; min-height: 34px; padding: 0 13px; border: 1px solid var(--line-strong); border-radius: 9px; color: var(--danger); background: var(--paper); cursor: pointer; font: inherit; font-size: 10px; font-weight: 400; }
+.stop-transfer-button:hover { border-color: var(--ink); color: var(--ink); }
+.stop-transfer-button:disabled { opacity: 0.45; cursor: wait; }
 .download-list { margin-top: 22px; display: grid; gap: 9px; text-align: left; }
 .download-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 12px 13px 12px 15px; border: 1px solid var(--line); border-radius: 14px; background: var(--paper); }
 .download-item span { min-width: 0; display: flex; flex-direction: column; gap: 4px; }

@@ -132,6 +132,24 @@ test("keeps the screen awake only while file bytes are transferring", async () =
   assert.match(vercelConfig, /screen-wake-lock=\(self\)/);
 });
 
+test("lets either device stop an active transfer and warns before leaving", async () => {
+  const pageResponse = await fetch(`${origin}/`);
+  assert.equal(pageResponse.status, 200);
+  const html = await pageResponse.text();
+  assert.match(html, /id="sender-stop-transfer"/);
+  assert.match(html, /id="receiver-stop-transfer"/);
+  assert.equal((html.match(/data-i18n="transfer\.keepOpen"/g) || []).length, 2);
+
+  const scriptResponse = await fetch(`${origin}/app.js`);
+  assert.equal(scriptResponse.status, 200);
+  const script = await scriptResponse.text();
+  assert.match(script, /sendSecure\("terminate", \{ reason: "user" \}\)/);
+  assert.match(script, /message\.type === "terminate"/);
+  assert.match(script, /await abortReceiveSink\(\)/);
+  assert.match(script, /window\.addEventListener\("beforeunload"/);
+  assert.match(script, /event\.returnValue = ""/);
+});
+
 test("reports local signaling and TURN configuration", async () => {
   const response = await fetch(`${origin}/api/status`);
   assert.equal(response.status, 200);

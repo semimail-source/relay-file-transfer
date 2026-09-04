@@ -61,6 +61,8 @@ const state = {
   receiveQueue: Promise.resolve(),
   accepted: false,
   sending: false,
+  transferAborted: false,
+  transferComplete: false,
   sentHashes: new Map(),
   receivedAcks: new Set(),
   savedAcks: new Set(),
@@ -102,7 +104,8 @@ function taskStatusText(phase, detail = {}) {
     transferring: t("task.transferring", `传输中 ${detail.percent ?? 0}%`, { percent: detail.percent ?? 0 }),
     received: t("task.received", "已接收，等待保存"),
     complete: t("task.complete", "已完成"),
-    error: t("task.error", "连接遇到问题")
+    error: t("task.error", "连接遇到问题"),
+    stopped: t("task.stopped", "已终止")
   };
   return labels[phase] || t("task.default", "发送任务");
 }
@@ -561,6 +564,7 @@ async function makePeer(role) {
   });
   peer.addEventListener("connectionstatechange", () => {
     clearTimeout(state.disconnectTimer);
+    if (state.transferAborted || state.transferComplete) return;
     if (peer.connectionState === "connected") updateConnectionPath(peer, role).catch(() => {});
     if (peer.connectionState === "connected" && role === "sender") {
       $("#sender-orb").classList.add("connected");
@@ -681,6 +685,114 @@ function stopPolling() {
   state.pollTimer = null;
 }
 
+function transferInProgress() {
+  return !state.transferAborted && !state.transferComplete &&
+    (state.role === "sender" ? state.sending : state.accepted);
+}
+
+function transferAbortError() {
+  const error = new Error("transfer_aborted");
+  error.code = "transfer_aborted";
+  return error;
+}
+
+function isTransferAbortError(error) {
+  return error?.code === "transfer_aborted" || error?.message === "transfer_aborted";
+}
+
+function assertTransferActive() {
+  if (state.transferAborted) throw transferAbortError();
+}
+
+function setTransferActions(role, visible) {
+  const element = $(`#${role}-transfer-actions`);
+  if (element) element.classList.toggle("hidden", !visible);
+}
+
+async function abortReceiveSink() {
+  const sink = state.sink;
+  state.sink = null;
+  state.metadata = null;
+  state.receiveHasher = null;
+  if (!sink?.abort) return;
+  try {
+    await sink.abort();
+  } catch (_) {
+    // A simultaneous write or peer disconnect may already have closed the sink.
+  }
+}
+
+function renderTransferStopped(origin) {
+  const title = origin === "local"
+    ? t("transfer.stoppedByYou", "你已终止传输")
+    : t("transfer.stoppedByPeer", "对方已终止传输");
+  const detail = t("transfer.stoppedDetail", "未完成的文件已丢弃。");
+  if (state.role === "receiver") {
+    $("#receiver-animation").classList.remove("complete");
+    $("#receiver-kicker").textContent = t("transfer.stoppedKicker", "传输已终止");
+    $("#receiver-title").textContent = title;
+    $("#receiver-message").textContent = detail;
+    $("#receiver-error").textContent = "";
+    $("#receiver-progress-label").textContent = title;
+    $("#receiver-percent").textContent = "—";
+  } else {
+    $("#sender-orb").classList.remove("connected", "complete");
+    $("#sender-kicker").textContent = t("transfer.stoppedKicker", "传输已终止");
+    $("#sender-status").textContent = title;
+    $("#sender-detail").textContent = detail;
+    $("#sender-percent").textContent = "—";
+  }
+}
+
+async function waitForTerminationNotice(channel, timeoutMs = 5000) {
+  const deadline = performance.now() + timeoutMs;
+  while (channel?.readyState === "open" && channel.bufferedAmount > 0 && performance.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  if (channel?.readyState === "open") await new Promise(resolve => setTimeout(resolve, 100));
+}
+
+async function terminateTransfer(origin = "local", { confirmStop = true } = {}) {
+  if (state.transferAborted || state.transferComplete) return false;
+  if (origin === "local" && confirmStop && !window.confirm(
+    t("transfer.stopConfirm", "确定终止本次传输吗？对方会收到通知，未完成的文件将被丢弃。")
+  )) return false;
+
+  state.transferAborted = true;
+  state.sending = false;
+  state.accepted = false;
+  setTransferActions("sender", false);
+  setTransferActions("receiver", false);
+  renderTransferStopped(origin);
+  notifyTaskParent("stopped");
+
+  if (origin === "local" && state.channel?.readyState === "open") {
+    try {
+      await sendSecure("terminate", { reason: "user" });
+      await waitForTerminationNotice(state.channel);
+    } catch (_) {
+      // The transfer still stops locally if the peer disconnects at the same time.
+    }
+  }
+
+  await abortReceiveSink();
+  stopRelayMonitoring();
+  stopPolling();
+  stopExpiryCountdown();
+  await releaseTransferWakeLock();
+  if (state.role === "sender") await deleteRoom().catch(() => {});
+  state.channel?.close();
+  state.peer?.close();
+  return true;
+}
+
+async function handleStopTransfer(event) {
+  const button = event.currentTarget;
+  button.disabled = true;
+  const stopped = await terminateTransfer("local");
+  if (!stopped) button.disabled = false;
+}
+
 function wireSenderChannel(channel) {
   state.channel = channel;
   channel.binaryType = "arraybuffer";
@@ -708,11 +820,15 @@ function wireSenderChannel(channel) {
   channel.addEventListener("message", event => {
     if (typeof event.data !== "string") return;
     decryptSecure(event.data).then(message => {
-      if (message.type === "accept" && !state.sending) return sendFiles();
+      if (message.type === "terminate") return terminateTransfer("remote", { confirmStop: false });
+      if (message.type === "accept" && !state.sending && !state.transferAborted) return sendFiles();
       if (message.type === "file-received") {
         const index = message.payload?.index;
         if (Number.isInteger(index) && message.payload?.sha256 === state.sentHashes.get(index)) state.receivedAcks.add(index);
         if (state.receivedAcks.size === state.files.length) {
+          state.sending = false;
+          state.transferComplete = true;
+          setTransferActions("sender", false);
           releaseTransferWakeLock();
           $("#sender-orb").classList.add("complete");
           $("#sender-kicker").textContent = t("sender.receivedKicker", "对方已完整接收");
@@ -732,14 +848,19 @@ function wireSenderChannel(channel) {
           deleteRoom().catch(() => {});
         }
       }
-    }).catch(showConnectionError);
+    }).catch(error => {
+      if (!state.transferAborted && !isTransferAbortError(error)) showConnectionError(error);
+    });
   });
 }
 
 async function waitForBuffer(channel) {
+  assertTransferActive();
   try {
     await waitForWritableBuffer(channel);
+    assertTransferActive();
   } catch (error) {
+    if (state.transferAborted || isTransferAbortError(error)) throw transferAbortError();
     if (error?.code === "channel_closed" || error?.message === "channel_closed") {
       throw new Error(t("error.channelClosed", "传输期间连接已关闭。"));
     }
@@ -752,73 +873,90 @@ function formatRate(bytesPerSecond) {
 }
 
 async function sendFiles() {
+  state.transferAborted = false;
+  state.transferComplete = false;
   state.sending = true;
+  setTransferActions("sender", true);
   state.sendRateTracker = createRateTracker(performance.now(), 0);
-  await acquireTransferWakeLock();
-  const batchSize = totalSize(state.files);
-  let batchOffset = 0;
-  $("#sender-kicker").textContent = t("sender.transferring", "正在加密传输");
-  $("#sender-detail").textContent = t("sender.transferDetail", `${state.files.length} 个文件 · ${formatBytes(batchSize)} · 请保持页面打开`, { count: state.files.length, size: formatBytes(batchSize) });
-  notifyTaskParent("transferring", { percent: 0 });
-  for (let fileIndex = 0; fileIndex < state.files.length; fileIndex += 1) {
-    const file = state.files[fileIndex];
-    const noncePrefix = crypto.getRandomValues(new Uint8Array(4));
-    const hasher = new Sha256();
-    let offset = 0;
-    let chunkIndex = 0;
-    $("#sender-status").textContent = `${fileIndex + 1} / ${state.files.length} · ${safeFilename(file.name)}`;
-    await sendSecure("file-start", {
-      index: fileIndex,
-      name: safeFilename(file.name),
-      size: file.size,
-      mime: file.type || "application/octet-stream",
-      chunkSize: state.chunkSize,
-      noncePrefix: base64UrlEncode(noncePrefix)
-    });
-    while (offset < file.size) {
-      if (state.channel.readyState !== "open") throw new Error(t("error.channelClosed", "连接已经关闭。"));
-      await waitForBuffer(state.channel);
-      const plain = new Uint8Array(await file.slice(offset, offset + state.chunkSize).arrayBuffer());
-      hasher.update(plain);
-      const encrypted = await crypto.subtle.encrypt(
-        { name: "AES-GCM", iv: chunkIv(noncePrefix, chunkIndex), additionalData: roomAdditionalData() },
-        state.cryptoKey,
-        plain
-      );
-      state.channel.send(encrypted);
-      offset += plain.byteLength;
-      batchOffset += plain.byteLength;
-      chunkIndex += 1;
-      const bytesPerSecond = sampleRate(state.sendRateTracker, batchOffset, performance.now());
-      if (bytesPerSecond !== null) {
-        $("#sender-detail").textContent = t(
-          "sender.transferLive",
-          `${state.files.length} 个文件 · ${formatBytes(batchSize)} · ${formatRate(bytesPerSecond)} · 请保持页面打开`,
-          {
-            count: state.files.length,
-            size: formatBytes(batchSize),
-            speed: formatRate(bytesPerSecond)
-          }
+  try {
+    await acquireTransferWakeLock();
+    assertTransferActive();
+    const batchSize = totalSize(state.files);
+    let batchOffset = 0;
+    $("#sender-kicker").textContent = t("sender.transferring", "正在加密传输");
+    $("#sender-detail").textContent = t("sender.transferDetail", `${state.files.length} 个文件 · ${formatBytes(batchSize)} · 请保持页面打开`, { count: state.files.length, size: formatBytes(batchSize) });
+    notifyTaskParent("transferring", { percent: 0 });
+    for (let fileIndex = 0; fileIndex < state.files.length; fileIndex += 1) {
+      assertTransferActive();
+      const file = state.files[fileIndex];
+      const noncePrefix = crypto.getRandomValues(new Uint8Array(4));
+      const hasher = new Sha256();
+      let offset = 0;
+      let chunkIndex = 0;
+      $("#sender-status").textContent = `${fileIndex + 1} / ${state.files.length} · ${safeFilename(file.name)}`;
+      await sendSecure("file-start", {
+        index: fileIndex,
+        name: safeFilename(file.name),
+        size: file.size,
+        mime: file.type || "application/octet-stream",
+        chunkSize: state.chunkSize,
+        noncePrefix: base64UrlEncode(noncePrefix)
+      });
+      while (offset < file.size) {
+        assertTransferActive();
+        if (state.channel.readyState !== "open") throw new Error(t("error.channelClosed", "连接已经关闭。"));
+        await waitForBuffer(state.channel);
+        const plain = new Uint8Array(await file.slice(offset, offset + state.chunkSize).arrayBuffer());
+        assertTransferActive();
+        hasher.update(plain);
+        const encrypted = await crypto.subtle.encrypt(
+          { name: "AES-GCM", iv: chunkIv(noncePrefix, chunkIndex), additionalData: roomAdditionalData() },
+          state.cryptoKey,
+          plain
         );
+        assertTransferActive();
+        state.channel.send(encrypted);
+        offset += plain.byteLength;
+        batchOffset += plain.byteLength;
+        chunkIndex += 1;
+        const bytesPerSecond = sampleRate(state.sendRateTracker, batchOffset, performance.now());
+        if (bytesPerSecond !== null) {
+          $("#sender-detail").textContent = t(
+            "sender.transferLive",
+            `${state.files.length} 个文件 · ${formatBytes(batchSize)} · ${formatRate(bytesPerSecond)} · 请保持页面打开`,
+            {
+              count: state.files.length,
+              size: formatBytes(batchSize),
+              speed: formatRate(bytesPerSecond)
+            }
+          );
+        }
+        const percent = batchSize ? Math.min(100, Math.round((batchOffset / batchSize) * 100)) : 100;
+        $("#sender-progress").style.width = `${percent}%`;
+        $("#sender-percent").textContent = `${percent}%`;
+        if (percent === 100 || percent >= state.lastTaskProgress + 2) {
+          state.lastTaskProgress = percent;
+          notifyTaskParent("transferring", { percent });
+        }
       }
-      const percent = batchSize ? Math.min(100, Math.round((batchOffset / batchSize) * 100)) : 100;
-      $("#sender-progress").style.width = `${percent}%`;
-      $("#sender-percent").textContent = `${percent}%`;
-      if (percent === 100 || percent >= state.lastTaskProgress + 2) {
-        state.lastTaskProgress = percent;
-        notifyTaskParent("transferring", { percent });
-      }
+      const hash = hasher.hex();
+      state.sentHashes.set(fileIndex, hash);
+      await waitForBuffer(state.channel);
+      assertTransferActive();
+      await sendSecure("file-end", { index: fileIndex, size: file.size, chunks: chunkIndex, sha256: hash });
     }
-    const hash = hasher.hex();
-    state.sentHashes.set(fileIndex, hash);
-    await waitForBuffer(state.channel);
-    await sendSecure("file-end", { index: fileIndex, size: file.size, chunks: chunkIndex, sha256: hash });
+    assertTransferActive();
+    $("#sender-progress").style.width = "100%";
+    $("#sender-percent").textContent = "100%";
+    $("#sender-kicker").textContent = t("sender.sentVerifying", "全部发送完毕，正在校验");
+    $("#sender-status").textContent = t("sender.waitVerification", `等待确认 ${state.files.length} 个文件`, { count: state.files.length });
+    $("#sender-detail").textContent = t("sender.hashDetail", "每个文件都通过 SHA-256 校验后，才会显示传输成功");
+  } catch (error) {
+    state.sending = false;
+    if (state.transferAborted || isTransferAbortError(error)) return;
+    setTransferActions("sender", false);
+    showConnectionError(error);
   }
-  $("#sender-progress").style.width = "100%";
-  $("#sender-percent").textContent = "100%";
-  $("#sender-kicker").textContent = t("sender.sentVerifying", "全部发送完毕，正在校验");
-  $("#sender-status").textContent = t("sender.waitVerification", `等待确认 ${state.files.length} 个文件`, { count: state.files.length });
-  $("#sender-detail").textContent = t("sender.hashDetail", "每个文件都通过 SHA-256 校验后，才会显示传输成功");
 }
 
 async function createRoom() {
@@ -936,6 +1074,15 @@ async function createReceiveSink(meta) {
           await writable.close();
           const stored = await handle.getFile();
           return { file: new File([stored], meta.name, { type: meta.mime, lastModified: Date.now() }), cleanup: () => root.removeEntry(tempName).catch(() => {}) };
+        },
+        abort: async () => {
+          try {
+            if (typeof writable.abort === "function") await writable.abort();
+            else await writable.close();
+          } catch (_) {
+            // The stream may already be closed by a simultaneous write failure.
+          }
+          await root.removeEntry(tempName).catch(() => {});
         }
       };
     } catch (_) {
@@ -946,7 +1093,8 @@ async function createReceiveSink(meta) {
   return {
     mode: "memory",
     write: chunk => chunks.push(chunk),
-    finish: async () => ({ file: new File(chunks, meta.name, { type: meta.mime, lastModified: Date.now() }), cleanup: () => {} })
+    finish: async () => ({ file: new File(chunks, meta.name, { type: meta.mime, lastModified: Date.now() }), cleanup: () => {} }),
+    abort: async () => { chunks.length = 0; }
   };
 }
 
@@ -976,11 +1124,17 @@ function wireReceiverChannel(channel) {
       }
       if (typeof event.data === "string") return handleReceiverControl(await decryptSecure(event.data));
       return receiveEncryptedChunk(event.data);
-    }).catch(showConnectionError);
+    }).catch(error => {
+      if (!state.transferAborted && !isTransferAbortError(error)) showConnectionError(error);
+    });
   });
 }
 
 async function handleReceiverControl(message) {
+  if (message.type === "terminate") {
+    await terminateTransfer("remote", { confirmStop: false });
+    return;
+  }
   if (message.type === "manifest") showIncomingFiles(message.payload);
   if (message.type === "file-start") await startIncomingFile(message.payload);
   if (message.type === "file-end") await finishIncomingFile(message.payload);
@@ -1020,6 +1174,8 @@ async function acceptFile() {
   button.disabled = true;
   $("#receiver-error").textContent = "";
   try {
+    state.transferAborted = false;
+    state.transferComplete = false;
     await acquireTransferWakeLock();
     button.classList.add("hidden");
     $("#receiver-progress-wrap").classList.remove("hidden");
@@ -1027,11 +1183,14 @@ async function acceptFile() {
     $("#receiver-title").innerHTML = t("receiver.receivingTitle", "正在接收文件");
     $("#receiver-message").textContent = t("receiver.tempStorage", "文件会逐个写入浏览器临时存储，请保持页面打开。");
     state.accepted = true;
+    setTransferActions("receiver", true);
     state.receiveRateTracker = createRateTracker(performance.now(), state.totalReceivedBytes);
     await sendSecure("accept", null);
-  } catch (_) {
+  } catch (error) {
+    if (state.transferAborted || isTransferAbortError(error)) return;
     releaseTransferWakeLock();
     state.accepted = false;
+    setTransferActions("receiver", false);
     button.disabled = false;
     button.classList.remove("hidden");
     $("#receiver-error").textContent = t("error.storage", "无法准备本地临时存储。");
@@ -1039,6 +1198,7 @@ async function acceptFile() {
 }
 
 async function startIncomingFile(metadata) {
+  assertTransferActive();
   if (!state.accepted || !state.manifest || !metadata || !Number.isInteger(metadata.index) || metadata.index !== state.currentFileIndex + 1 ||
       !isValidChunkSize(metadata.chunkSize) || metadata.chunkSize !== state.manifest.chunkSize || !validManifestFile(metadata, metadata.index)) {
     throw new Error(t("error.fileInfo", "收到的文件信息无效。"));
@@ -1054,7 +1214,12 @@ async function startIncomingFile(metadata) {
   state.receivedBytes = 0;
   state.receivedChunks = 0;
   state.receiveHasher = new Sha256();
-  state.sink = await createReceiveSink(state.metadata);
+  const sink = await createReceiveSink(state.metadata);
+  if (state.transferAborted) {
+    await sink.abort?.();
+    throw transferAbortError();
+  }
+  state.sink = sink;
   $("#receiver-progress-label").textContent = `${metadata.index + 1} / ${state.manifest.files.length} · ${name}`;
   $("#receiver-message").textContent = state.sink.mode === "disk"
     ? t("receiver.diskBuffer", "数据正写入浏览器私有临时存储，不会占满内存。")
@@ -1062,22 +1227,31 @@ async function startIncomingFile(metadata) {
 }
 
 async function receiveEncryptedChunk(value) {
+  assertTransferActive();
   if (!state.sink || !state.metadata) throw new Error(t("error.notAccepted", "文件尚未获得接收许可。"));
+  const sink = state.sink;
+  const metadata = state.metadata;
+  const receiveHasher = state.receiveHasher;
+  const noncePrefix = state.noncePrefix;
+  const chunkIndex = state.receivedChunks;
   const encryptedSize = value instanceof Blob ? value.size : value?.byteLength;
-  if (!Number.isSafeInteger(encryptedSize) || encryptedSize > state.metadata.chunkSize + AES_GCM_TAG_BYTES) {
+  if (!Number.isSafeInteger(encryptedSize) || encryptedSize > metadata.chunkSize + AES_GCM_TAG_BYTES) {
     throw new Error(t("error.chunkSize", "收到的文件分片超过协商大小。"));
   }
   const encrypted = value instanceof Blob ? await value.arrayBuffer() : value;
+  assertTransferActive();
   const plain = new Uint8Array(await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: chunkIv(state.noncePrefix, state.receivedChunks), additionalData: roomAdditionalData() },
+    { name: "AES-GCM", iv: chunkIv(noncePrefix, chunkIndex), additionalData: roomAdditionalData() },
     state.cryptoKey,
     encrypted
   ));
-  if (plain.byteLength > state.metadata.chunkSize || state.receivedBytes + plain.byteLength > state.metadata.size) {
+  assertTransferActive();
+  if (plain.byteLength > metadata.chunkSize || state.receivedBytes + plain.byteLength > metadata.size) {
     throw new Error(t("error.chunkSize", "收到的文件分片超过协商大小。"));
   }
-  state.receiveHasher.update(plain);
-  await state.sink.write(plain);
+  receiveHasher.update(plain);
+  await sink.write(plain);
+  assertTransferActive();
   state.receivedBytes += plain.byteLength;
   state.totalReceivedBytes += plain.byteLength;
   state.receivedChunks += 1;
@@ -1089,6 +1263,7 @@ async function receiveEncryptedChunk(value) {
 }
 
 async function finishIncomingFile(expected) {
+  assertTransferActive();
   if (!state.sink || !state.metadata || expected.index !== state.currentFileIndex) throw new Error(t("error.endMarker", "文件结束标记无效。"));
   const actualHash = state.receiveHasher.hex();
   if (state.receivedBytes !== state.metadata.size || expected.size !== state.metadata.size ||
@@ -1096,6 +1271,7 @@ async function finishIncomingFile(expected) {
     throw new Error(t("error.integrity", "完整性校验失败，请不要保存，并重新传输。"));
   }
   const result = await state.sink.finish();
+  assertTransferActive();
   const objectUrl = URL.createObjectURL(result.file);
   state.objectUrls.push(objectUrl);
   state.receiveCleanups.push(result.cleanup);
@@ -1104,6 +1280,9 @@ async function finishIncomingFile(expected) {
   state.sink = null;
   state.metadata = null;
   if (state.currentFileIndex === state.manifest.files.length - 1) {
+    state.accepted = false;
+    state.transferComplete = true;
+    setTransferActions("receiver", false);
     releaseTransferWakeLock();
     $("#receiver-progress-label").textContent = t("receiver.allVerified", "全部接收并校验完成");
     $("#receiver-percent").textContent = "100%";
@@ -1245,8 +1424,13 @@ async function handleReceiverSignal(message) {
 }
 
 function showConnectionError(error) {
+  if (state.transferAborted || state.transferComplete || isTransferAbortError(error)) return;
   stopRelayMonitoring();
   releaseTransferWakeLock();
+  state.sending = false;
+  state.accepted = false;
+  setTransferActions("sender", false);
+  setTransferActions("receiver", false);
   const message = error?.message || t("error.connection", "连接出现问题。");
   if (!$("#receiver-view").classList.contains("hidden")) {
     $("#receiver-error").textContent = message;
@@ -1299,7 +1483,11 @@ async function deleteRoom() {
   }
 }
 
-async function cancelRoom() {
+async function cancelRoom(confirmActive = true) {
+  if (transferInProgress()) {
+    const stopped = await terminateTransfer("local", { confirmStop: confirmActive });
+    if (!stopped) return;
+  }
   stopPolling();
   stopRelayMonitoring();
   stopExpiryCountdown();
@@ -1330,7 +1518,7 @@ function initSender() {
     window.addEventListener("message", event => {
       if (event.origin !== window.location.origin || event.source !== window.parent) return;
       if (event.data?.taskId !== embeddedTaskId) return;
-      if (event.data.type === "relay:cancel-task") cancelRoom();
+      if (event.data.type === "relay:cancel-task") cancelRoom(false);
       if (event.data.type === "relay:select-files") setSelectedFiles(event.data.files);
     });
   }
@@ -1361,12 +1549,14 @@ function initSender() {
   $("#copy-link").addEventListener("click", copyLink);
   $("#copy-pickup-code").addEventListener("click", copyPickupCode);
   $("#cancel-room").addEventListener("click", cancelRoom);
+  $("#sender-stop-transfer").addEventListener("click", handleStopTransfer);
   $("#approve-receiver").addEventListener("click", approveReceiver);
   notifyTaskParent("ready");
 }
 
 $("#accept-file").addEventListener("click", acceptFile);
 $("#confirm-receipt").addEventListener("click", confirmReceipt);
+$("#receiver-stop-transfer").addEventListener("click", handleStopTransfer);
 
 const roomId = pageParams.get("room");
 const secrets = new URLSearchParams(window.location.hash.slice(1));
@@ -1381,7 +1571,13 @@ else if (roomId) {
 } else if (isEmbeddedSender) initSender();
 else initTaskHub();
 
-window.addEventListener("beforeunload", () => {
+window.addEventListener("beforeunload", event => {
+  if (!transferInProgress()) return;
+  event.preventDefault();
+  event.returnValue = "";
+});
+
+window.addEventListener("pagehide", () => {
   stopPolling();
   stopRelayMonitoring();
   stopExpiryCountdown();

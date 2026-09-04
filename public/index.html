@@ -44,14 +44,14 @@
         "sameAs": ["https://github.com/semimail-source/relay-file-transfer"]
       }
     </script>
-    <link rel="stylesheet" href="/styles.css?v=15">
-    <script src="/i18n.js?v=14" defer></script>
+    <link rel="stylesheet" href="/styles.css?v=16">
+    <script src="/i18n.js?v=15" defer></script>
     <script src="/qrcode.bundle.js" defer></script>
     <script src="/crypto.js" defer></script>
     <script src="/pickup-crypto.js" defer></script>
     <script src="/chunking.js?v=1" defer></script>
     <script src="/transfer-flow.js?v=1" defer></script>
-    <script src="/app.js?v=10" defer></script>
+    <script src="/app.js?v=11" defer></script>
   </head>
   <body class="landing">
     <div class="ambient ambient-one"></div>
@@ -201,6 +201,10 @@
             </div>
             <span id="sender-percent" class="status-percent">···</span>
             <div class="progress-track"><span id="sender-progress"></span></div>
+            <div id="sender-transfer-actions" class="transfer-actions hidden">
+              <span class="transfer-warning" data-i18n="transfer.keepOpen">传输期间，请勿关闭窗口</span>
+              <button id="sender-stop-transfer" class="stop-transfer-button" type="button" data-i18n="transfer.stop">终止传输</button>
+            </div>
           </article>
         </div>
       </section>
@@ -239,6 +243,10 @@
             <div class="receiver-progress-label"><span id="receiver-progress-label" data-i18n="receiver.progress">正在接收并校验</span><strong id="receiver-percent">0%</strong></div>
             <div class="progress-track large"><span id="receiver-progress"></span></div>
             <small id="receiver-bytes">0 B / 0 B</small>
+            <div id="receiver-transfer-actions" class="transfer-actions hidden">
+              <span class="transfer-warning" data-i18n="transfer.keepOpen">传输期间，请勿关闭窗口</span>
+              <button id="receiver-stop-transfer" class="stop-transfer-button" type="button" data-i18n="transfer.stop">终止传输</button>
+            </div>
           </div>
 
           <div id="download-list" class="download-list hidden" aria-label="可保存的文件" data-i18n-aria="receiver.downloadAria"></div>
