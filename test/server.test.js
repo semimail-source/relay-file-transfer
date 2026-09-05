@@ -153,6 +153,11 @@ test("lets either device stop an active transfer and warns before leaving", asyn
   assert.match(script, /event\.returnValue = ""/);
   assert.match(script, /senderSessions: new Map\(\)/);
   assert.match(script, /terminateAllSenderSessions/);
+  assert.match(script, /state\.authToken && state\.roomId/);
+  assert.match(script, /postSignal\("terminate", \{ reason: "user" \}\)/);
+  assert.match(script, /receiverId: result\.receiverId/);
+  assert.match(script, /multi: result\.multiRecipient \? "1" : "0"/);
+  assert.match(script, /room_full: t\("pickup\.full"/);
 });
 
 test("reports local signaling and TURN configuration", async () => {

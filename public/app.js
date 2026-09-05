@@ -249,14 +249,18 @@ async function claimFromGateway(event) {
     if (!response.ok) throw new Error(result.error || `HTTP_${response.status}`);
     const fragment = new URLSearchParams({
       receiver: result.receiverToken,
+      receiverId: result.receiverId,
       code: result.code,
-      verify: result.verificationRequired ? "1" : "0"
+      verify: result.verificationRequired ? "1" : "0",
+      multi: result.multiRecipient ? "1" : "0",
+      max: String(result.maxReceivers || 1)
     });
     window.location.replace(`/?room=${encodeURIComponent(result.roomId)}&lang=${relayLanguage}#${fragment}`);
   } catch (error) {
     const messages = {
       pickup_not_found: t("pickup.notFound", "取件码错误、已过期或尚未生成，请向发送方确认。"),
       room_claimed: t("pickup.claimed", "这批文件已被另一台设备领取。"),
+      room_full: t("pickup.full", "接收人数已满，请联系发送方。"),
       rate_limited: t("pickup.rateLimited", "尝试次数过多，请 10 分钟后再试。")
     };
     errorElement.textContent = messages[error.message] || t("pickup.failed", "暂时无法取件，请稍后重试。");
@@ -1039,6 +1043,8 @@ async function terminateTransfer(origin = "local", { confirmStop = true } = {}) 
     } catch (_) {
       // The transfer still stops locally if the peer disconnects at the same time.
     }
+  } else if (origin === "local" && state.authToken && state.roomId) {
+    await postSignal("terminate", { reason: "user" }).catch(() => {});
   }
 
   await abortReceiveSink();
