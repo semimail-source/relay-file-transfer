@@ -81,11 +81,18 @@ test("serves the encrypted sender page with security headers", async () => {
   assert.match(html, /class="github-star-link"[^>]+href="https:\/\/github\.com\/semimail-source\/relay-file-transfer"/);
   assert.match(html, /id="nav-send" class="transfer-nav-link"[^>]+data-i18n="nav.send"/);
   assert.match(html, /class="transfer-nav-link"[^>]+data-i18n="nav.pickup"/);
-  assert.match(html, /<meta name="description"[^>]+浏览器文件直传工具/);
+  assert.match(html, /<meta name="description"[^>]+浏览器之间直接发送大文件/);
+  assert.match(html, /<meta property="og:title" content="Relay 浏览器文件传输｜免费、加密、无需安装"/);
   assert.match(html, /<link rel="canonical" href="https:\/\/relay\.xueai\.pro\/\?lang=zh">/);
   assert.match(html, /hreflang="en" href="https:\/\/relay\.xueai\.pro\/\?lang=en"/);
-  assert.match(html, /type="application\/ld\+json"/);
-  assert.match(html, /<h1 data-i18n="home\.gatewayTitle">浏览器文件直传<\/h1>/);
+  assert.match(html, /id="site-structured-data" type="application\/ld\+json"/);
+  assert.match(html, /"@type": "WebSite"/);
+  assert.match(html, /"@type": "WebApplication"/);
+  assert.match(html, /"price": "0"/);
+  assert.match(html, /<h1 data-i18n="home\.gatewayTitle">免费的浏览器文件直传<\/h1>/);
+  assert.match(html, /id="seo-overview-title"[^>]*>跨设备发送大文件，无需上传云端<\/h2>/);
+  assert.match(html, /data-i18n="home\.featureEncryptionTitle">端到端加密<\/h3>/);
+  assert.match(html, /data-i18n="home\.featureMultiTitle">支持多人接收<\/h3>/);
   assert.match(response.headers.get("content-security-policy"), /default-src 'self'/);
   assert.match(response.headers.get("content-security-policy"), /frame-ancestors 'self'/);
   assert.equal(response.headers.get("x-frame-options"), "SAMEORIGIN");
@@ -113,6 +120,7 @@ test("publishes crawl rules, localized sitemap entries, and a favicon", async ()
   assert.match(sitemap, /https:\/\/relay\.xueai\.pro\/\?lang=zh/);
   assert.match(sitemap, /https:\/\/relay\.xueai\.pro\/\?lang=en/);
   assert.match(sitemap, /hreflang="x-default"/);
+  assert.equal((sitemap.match(/<lastmod>2026-09-05<\/lastmod>/g) || []).length, 2);
 
   const faviconResponse = await fetch(`${origin}/favicon.svg`);
   assert.equal(faviconResponse.status, 200);

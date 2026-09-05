@@ -6,7 +6,7 @@
     <meta name="theme-color" content="#ffffff">
     <meta name="application-name" content="Relay">
     <meta name="google-site-verification" content="_11B3cMkQkJb7LLGO7E9OUWPPI4gQ9lLGWzT3ItU26Y">
-    <meta name="description" content="Relay 是免费的浏览器文件直传工具，无需安装，可在 Windows、Mac、iPhone 和 Android 间发送大文件。端到端加密，文件不会储存在 Relay 服务器。" data-i18n-content="meta.homeDescription">
+    <meta name="description" content="使用 Relay 在 Windows、Mac、iPhone、Android 和 Linux 浏览器之间直接发送大文件。免费、无需安装、端到端加密，文件内容不会储存在 Relay 服务器。" data-i18n-content="meta.homeDescription">
     <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
     <link rel="canonical" href="https://relay.xueai.pro/?lang=zh">
     <link rel="alternate" hreflang="zh-CN" href="https://relay.xueai.pro/?lang=zh">
@@ -15,37 +15,53 @@
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Relay">
-    <meta property="og:title" content="Relay — 免费、无需安装的浏览器文件直传" data-i18n-content="meta.homeTitle">
-    <meta property="og:description" content="免费、无需安装、端到端加密；文件不会储存在 Relay 服务器。" data-i18n-content="meta.homeSocialDescription">
+    <meta property="og:title" content="Relay 浏览器文件传输｜免费、加密、无需安装" data-i18n-content="meta.homeTitle">
+    <meta property="og:description" content="在浏览器中直接发送大文件。免费、无需安装、端到端加密，文件内容不存 Relay 服务器。" data-i18n-content="meta.homeSocialDescription">
     <meta property="og:url" content="https://relay.xueai.pro/?lang=zh">
     <meta property="og:locale" content="zh_CN">
+    <meta property="og:locale:alternate" content="en_US">
     <meta name="twitter:card" content="summary">
-    <meta name="twitter:title" content="Relay — 免费、无需安装的浏览器文件直传" data-i18n-content="meta.homeTitle">
-    <meta name="twitter:description" content="免费、无需安装、端到端加密；文件不会储存在 Relay 服务器。" data-i18n-content="meta.homeSocialDescription">
-    <title data-i18n="meta.homeTitle">Relay — 免费、无需安装的浏览器文件直传</title>
-    <script type="application/ld+json">
+    <meta name="twitter:title" content="Relay 浏览器文件传输｜免费、加密、无需安装" data-i18n-content="meta.homeTitle">
+    <meta name="twitter:description" content="在浏览器中直接发送大文件。免费、无需安装、端到端加密，文件内容不存 Relay 服务器。" data-i18n-content="meta.homeSocialDescription">
+    <title data-i18n="meta.homeTitle">Relay 浏览器文件传输｜免费、加密、无需安装</title>
+    <script id="site-structured-data" type="application/ld+json">
       {
         "@context": "https://schema.org",
-        "@type": "WebApplication",
-        "name": "Relay",
-        "url": "https://relay.xueai.pro/",
-        "applicationCategory": "UtilitiesApplication",
-        "operatingSystem": "Windows, macOS, iOS, Android, Linux",
-        "browserRequirements": "Requires a modern browser with WebRTC support",
-        "description": "Free, install-free, end-to-end encrypted browser file transfer. Files are never stored on Relay.",
-        "inLanguage": ["zh-CN", "en"],
-        "isAccessibleForFree": true,
-        "offers": {
-          "@type": "Offer",
-          "price": "0",
-          "priceCurrency": "USD"
-        },
-        "license": "https://github.com/semimail-source/relay-file-transfer/blob/main/LICENSE",
-        "sameAs": ["https://github.com/semimail-source/relay-file-transfer"]
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "https://relay.xueai.pro/#website",
+            "url": "https://relay.xueai.pro/",
+            "name": "Relay",
+            "alternateName": "Relay File Transfer",
+            "inLanguage": ["zh-CN", "en"]
+          },
+          {
+            "@type": "WebApplication",
+            "@id": "https://relay.xueai.pro/#app",
+            "name": "Relay",
+            "url": "https://relay.xueai.pro/?lang=zh",
+            "applicationCategory": "UtilitiesApplication",
+            "operatingSystem": "Windows, macOS, iOS, Android, Linux",
+            "browserRequirements": "需要支持 WebRTC 的现代浏览器",
+            "description": "免费的浏览器文件直传工具，无需安装，支持端到端加密与最多 5 台设备接收，文件内容不会储存在 Relay 服务器。",
+            "featureList": ["端到端加密", "无需安装", "跨设备大文件传输", "最多 5 台设备接收", "一次性链接、二维码和取件码"],
+            "inLanguage": "zh-CN",
+            "isAccessibleForFree": true,
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD"
+            },
+            "license": "https://github.com/semimail-source/relay-file-transfer/blob/main/LICENSE",
+            "sameAs": "https://github.com/semimail-source/relay-file-transfer",
+            "isPartOf": { "@id": "https://relay.xueai.pro/#website" }
+          }
+        ]
       }
     </script>
-    <link rel="stylesheet" href="/styles.css?v=16">
-    <script src="/i18n.js?v=15" defer></script>
+    <link rel="stylesheet" href="/styles.css?v=17">
+    <script src="/i18n.js?v=16" defer></script>
     <script src="/qrcode.bundle.js" defer></script>
     <script src="/crypto.js" defer></script>
     <script src="/pickup-crypto.js" defer></script>
@@ -79,8 +95,8 @@
     <main>
       <section id="home-gateway" class="gateway view">
         <div class="gateway-intro">
-          <h1 data-i18n="home.gatewayTitle">浏览器文件直传</h1>
-          <p data-i18n="home.gatewayLede">免费 · 无需安装 · 不储存文件</p>
+          <h1 data-i18n="home.gatewayTitle">免费的浏览器文件直传</h1>
+          <p data-i18n="home.gatewayLede">无需安装 · 端到端加密 · 不储存文件</p>
         </div>
 
         <div class="gateway-actions" aria-label="提取或发送文件" data-i18n-aria="home.gatewayAria">
@@ -112,6 +128,44 @@
             <input id="gateway-file-input" class="gateway-file-input" type="file" multiple hidden>
           </section>
         </div>
+
+        <section class="seo-overview" aria-labelledby="seo-overview-title">
+          <div class="seo-overview-copy">
+            <p class="eyebrow" data-i18n="home.seoEyebrow">关于 Relay</p>
+            <h2 id="seo-overview-title" data-i18n="home.seoTitle">跨设备发送大文件，无需上传云端</h2>
+            <p data-i18n="home.seoIntro">Relay 通过浏览器在 Windows、Mac、iPhone、Android 和 Linux 设备之间传送文件。选择文件后分享一次性链接、二维码或取件码，接收方打开即可开始。</p>
+          </div>
+
+          <div class="seo-feature-grid" aria-label="Relay 功能" data-i18n-aria="home.featuresAria">
+            <article class="seo-feature">
+              <h3 data-i18n="home.featureEncryptionTitle">端到端加密</h3>
+              <p data-i18n="home.featureEncryptionText">文件在发送前使用 AES-GCM 加密，并通过 SHA-256 校验完整性；Relay 服务器不保存文件内容。</p>
+            </article>
+            <article class="seo-feature">
+              <h3 data-i18n="home.featureInstallTitle">无需安装或注册</h3>
+              <p data-i18n="home.featureInstallText">不需要安装应用或创建账号，在现代浏览器中即可发送照片、视频、文件夹压缩包和其他大文件。</p>
+            </article>
+            <article class="seo-feature">
+              <h3 data-i18n="home.featureMultiTitle">支持多人接收</h3>
+              <p data-i18n="home.featureMultiText">一个传输入口最多连接 5 台接收设备，每台设备使用独立的加密连接完成传输。</p>
+            </article>
+          </div>
+
+          <div class="seo-how">
+            <div>
+              <h2 data-i18n="home.howTitle">如何传输文件</h2>
+              <ol>
+                <li data-i18n="home.howChoose">选择照片、视频或其他文件。</li>
+                <li data-i18n="home.howShare">把一次性链接、二维码或取件码发给接收方。</li>
+                <li data-i18n="home.howTransfer">双方保持页面打开，文件会在加密连接中直接传送。</li>
+              </ol>
+            </div>
+            <aside class="seo-security" aria-labelledby="seo-security-title">
+              <h3 id="seo-security-title" data-i18n="home.securityTitle">隐私与连接方式</h3>
+              <p data-i18n="home.securityText">Relay 会优先建立设备间直接连接；网络条件需要时，数据可能经过中继转发，但文件内容仍保持端到端加密且不会被储存。</p>
+            </aside>
+          </div>
+        </section>
       </section>
 
       <section id="sender-start" class="hero view hidden">

@@ -3,12 +3,14 @@
         xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
     <loc>https://relay.xueai.pro/?lang=zh</loc>
+    <lastmod>2026-09-05</lastmod>
     <xhtml:link rel="alternate" hreflang="zh-CN" href="https://relay.xueai.pro/?lang=zh" />
     <xhtml:link rel="alternate" hreflang="en" href="https://relay.xueai.pro/?lang=en" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://relay.xueai.pro/" />
   </url>
   <url>
     <loc>https://relay.xueai.pro/?lang=en</loc>
+    <lastmod>2026-09-05</lastmod>
     <xhtml:link rel="alternate" hreflang="zh-CN" href="https://relay.xueai.pro/?lang=zh" />
     <xhtml:link rel="alternate" hreflang="en" href="https://relay.xueai.pro/?lang=en" />
     <xhtml:link rel="alternate" hreflang="x-default" href="https://relay.xueai.pro/" />

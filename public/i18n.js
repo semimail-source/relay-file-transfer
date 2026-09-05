@@ -1,9 +1,9 @@
 (function () {
   const translations = {
     en: {
-      "meta.homeTitle": "Relay — Free, install-free browser file transfer",
-      "meta.homeDescription": "Relay is a free, install-free browser file transfer tool for Windows, Mac, iPhone, and Android. End-to-end encrypted, with files never stored on Relay.",
-      "meta.homeSocialDescription": "Free, install-free and end-to-end encrypted. Files are never stored on Relay.",
+      "meta.homeTitle": "Relay Browser File Transfer | Free, Encrypted, No Install",
+      "meta.homeDescription": "Send large files directly between Windows, Mac, iPhone, Android and Linux browsers. Relay is free, requires no installation, uses end-to-end encryption and never stores file contents.",
+      "meta.homeSocialDescription": "Send large files browser to browser. Free, install-free and end-to-end encrypted, with no file storage on Relay servers.",
       "meta.pickupTitle": "Enter a pickup code — Relay",
       "meta.pickupDescription": "Enter a one-time Relay pickup code to receive files directly from the sender's browser.",
       "common.homeAria": "Relay home",
@@ -15,8 +15,8 @@
       "nav.transferAria": "Choose send or receive",
       "nav.send": "Send files",
       "nav.pickup": "Receive files",
-      "home.gatewayTitle": "Direct browser file transfer",
-      "home.gatewayLede": "Free · No installation · Files are never stored",
+      "home.gatewayTitle": "Free browser file transfer",
+      "home.gatewayLede": "No installation · End-to-end encrypted · Files are never stored",
       "home.gatewayAria": "Choose to receive or send files",
       "home.receive": "Receive files",
       "home.receiveHelp": "Enter a pickup code",
@@ -29,6 +29,21 @@
       "home.featureInstall": "No installation",
       "home.featureDevices": "Cross-device",
       "home.featureOnce": "One-time link",
+      "home.seoEyebrow": "About Relay",
+      "home.seoTitle": "Send large files across devices without uploading to the cloud",
+      "home.seoIntro": "Relay transfers files between Windows, Mac, iPhone, Android and Linux devices in the browser. Choose files, then share a one-time link, QR code or pickup code so the recipient can connect.",
+      "home.featureEncryptionTitle": "End-to-end encrypted",
+      "home.featureEncryptionText": "Files are encrypted with AES-GCM before sending and checked with SHA-256. Relay servers never store the file contents.",
+      "home.featureInstallTitle": "No install or account",
+      "home.featureInstallText": "Send photos, videos, archives and other large files in a modern browser without installing an app or creating an account.",
+      "home.featureMultiTitle": "Multiple recipients",
+      "home.featureMultiText": "One transfer link can connect up to five receiving devices, each through a separate encrypted connection.",
+      "home.howTitle": "How to transfer files",
+      "home.howChoose": "Choose photos, videos or other files.",
+      "home.howShare": "Share the one-time link, QR code or pickup code.",
+      "home.howTransfer": "Keep both pages open while the files transfer through the encrypted connection.",
+      "home.securityTitle": "Privacy and connections",
+      "home.securityText": "Relay prefers a direct device-to-device connection. When the network requires a relay, file contents remain end-to-end encrypted and are never stored.",
       "tasks.aria": "Send task hub",
       "tasks.label": "Transfers",
       "tasks.title": "Multiple transfers, one page",
@@ -289,9 +304,30 @@
     const canonical = document.querySelector('link[rel="canonical"]');
     const openGraphUrl = document.querySelector('meta[property="og:url"]');
     const openGraphLocale = document.querySelector('meta[property="og:locale"]');
+    const openGraphAlternateLocale = document.querySelector('meta[property="og:locale:alternate"]');
     if (canonical && location.pathname === "/") canonical.href = `https://relay.xueai.pro/?lang=${lang}`;
     if (openGraphUrl) openGraphUrl.content = `https://relay.xueai.pro/?lang=${lang}`;
     if (openGraphLocale) openGraphLocale.content = lang === "zh" ? "zh_CN" : "en_US";
+    if (openGraphAlternateLocale) openGraphAlternateLocale.content = lang === "zh" ? "en_US" : "zh_CN";
+    const structuredData = document.querySelector("#site-structured-data");
+    if (structuredData) {
+      try {
+        const data = JSON.parse(structuredData.textContent);
+        const app = data["@graph"]?.find(item => item["@id"] === "https://relay.xueai.pro/#app");
+        if (app) {
+          app.url = `https://relay.xueai.pro/?lang=${lang}`;
+          app.inLanguage = lang === "zh" ? "zh-CN" : "en";
+          app.browserRequirements = lang === "zh" ? "需要支持 WebRTC 的现代浏览器" : "Requires a modern browser with WebRTC support";
+          app.description = t("meta.homeDescription", { zh: app.description });
+          app.featureList = lang === "zh"
+            ? ["端到端加密", "无需安装", "跨设备大文件传输", "最多 5 台设备接收", "一次性链接、二维码和取件码"]
+            : ["End-to-end encryption", "No installation", "Cross-device large file transfer", "Up to five receiving devices", "One-time links, QR codes and pickup codes"];
+          structuredData.textContent = JSON.stringify(data);
+        }
+      } catch (_) {
+        // Keep the valid server-rendered structured data if localization fails.
+      }
+    }
     const toggle = document.querySelector("#language-toggle");
     if (toggle) {
       toggle.textContent = lang === "zh" ? "English" : "中文";
